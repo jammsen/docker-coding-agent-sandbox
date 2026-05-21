@@ -3,7 +3,7 @@
   "provider": {
     "vllm": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "vLLM (Gemma4 local)",
+      "name": "vLLM",
       "options": {
         "baseURL": "http://10.0.0.13:8000/v1"
       },
@@ -19,26 +19,10 @@
           }
         }
       }
-    },
-    "vllm-side": {
-      "npm": "@ai-sdk/openai-compatible",
-      "name": "vLLM (Qwen3-14B local)",
-      "options": {
-        "baseURL": "http://10.0.0.13:8001/v1"
-      },
-      "models": {
-        "qwen3-14b": {
-          "name": "Qwen3 14B AWQ",
-          "limit": {
-            "context": 16384,
-            "output": 4096
-          }
-        }
-      }
     }
   },
   "model": "vllm/qwen3.6-35b",
-  "small_model": "vllm-side/qwen3-14b",
+  "small_model": "vllm/qwen3.6-35b",
   "agent": {
     "build": {
       "prompt": "You must maintain a file called WORKLOG.md in the current project working directory at all times.\\n\\nRules:\\n- Before starting any task, check if WORKLOG.md exists and read it to understand prior context.\\n- After completing EACH task, immediately update WORKLOG.md with: what was done (specific files changed, exact lines modified), what was found (exact issues, not vague summaries), and what still needs doing with current date and time in german timezone. Do NOT proceed to the next task until WORKLOG.md has been updated.\\n- If WORKLOG.md does not exist, create it before doing anything else.",

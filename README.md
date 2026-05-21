@@ -2,7 +2,7 @@
 
 Run OpenCode as a sandboxed, non-root Docker container connected to a self-hosted vLLM inference server. No cloud API keys required.
 
-***
+---
 
 ## Prerequisites
 
@@ -11,9 +11,11 @@ Run OpenCode as a sandboxed, non-root Docker container connected to a self-hoste
 - Your vLLM server must have the model loaded and `/v1/models` responding
 
 Verify your vLLM is reachable before starting:
+
 ```bash
 curl http://10.0.0.13:8000/v1/models
 ```
+
 You should see your model ID in the response (e.g. `gemma4-26b-a4b`).
 
 Use the exact `"id"` value from the response — e.g. `gemma4-26b-a4b`.
@@ -21,7 +23,7 @@ Use the exact `"id"` value from the response — e.g. `gemma4-26b-a4b`.
 **Finding your context size:**
 The `max_model_len` field in the `/v1/models` response is your context limit. Use that value for `"context"`.
 
-***
+---
 
 ## Directory Structure
 
@@ -36,7 +38,7 @@ opencode-sandbox/
 └── workspace/          ← put your code projects here
 ```
 
-***
+---
 
 ## Get, Build & Run
 
@@ -56,7 +58,7 @@ docker compose build && docker compose run --rm opencode
 
 On first launch OpenCode opens the TUI. Press `/` to open the command palette.
 
-***
+---
 
 ## Verify Everything Works
 
@@ -67,7 +69,7 @@ Inside the TUI:
 3. Check the status bar at the bottom — it should show `Gemma 4 26B MoE · vLLM (Gemma4 local)`
 4. Check the right panel — `$0.00 spent` confirms no cloud API is being used
 
-***
+---
 
 ## Usage Tips
 
@@ -82,10 +84,10 @@ cp -r ~/myproject ./workspace/myproject
 
 ### Modes
 
-| Mode | Shortcut | Token overhead | Best for |
-|------|----------|----------------|----------|
-| Build | default | ~10k tokens | Agentic file editing, multi-step tasks |
-| Ask | `tab` | ~3-5k tokens | Questions, code review, explanations |
+| Mode  | Shortcut | Token overhead | Best for                               |
+| ----- | -------- | -------------- | -------------------------------------- |
+| Build | default  | ~10k tokens    | Agentic file editing, multi-step tasks |
+| Ask   | `tab`    | ~3-5k tokens   | Questions, code review, explanations   |
 
 With a 32k context limit, **Ask mode** leaves significantly more room for your actual code and conversation.
 
@@ -93,7 +95,7 @@ With a 32k context limit, **Ask mode** leaves significantly more room for your a
 
 The status bar shows `X tokens (Y% used)`. Build mode consumes ~10,000 tokens just for the system prompt before you type anything. For large codebases, open only the files you need or use Ask mode.
 
-***
+---
 
 ## Troubleshooting
 
@@ -123,11 +125,12 @@ If this fails, your vLLM IP is unreachable from the container. Use the actual ho
 **Tool calling loops or model halts mid-task**
 
 This is a known Gemma 4 behavior with agentic tool use. Mitigations:
+
 - Prefer **Ask mode** for questions and code review that don't require file editing
 - For Build mode, give explicit step-by-step instructions rather than open-ended goals
 - Keep tasks scoped to one file or one function at a time
 
-***
+---
 
 ## Security Notes
 
@@ -140,3 +143,13 @@ The container runs with the following restrictions:
 - Filesystem access limited to `./workspace` on the host
 
 The model runs entirely on your local vLLM server. No data leaves your network.
+
+## Using Tools and Skills
+
+### Skills
+
+Skills a special capabilities for an Agent that tells him how to do things or how to handle tools.
+They have a specific Format and a SKILL.md file is mandatory.
+Read more about Skills here https://agentskills.io/home
+
+- just copy over the `.opencode` folder into your workspace. Opencode will then recognize them
