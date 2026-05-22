@@ -2,17 +2,22 @@ services:
   opencode:
     build: .
     container_name: opencode-sandbox
-    user: "1000:1000"                    # enforce non-root
     stdin_open: true
     tty: true
-    read_only: false                     # opencode writes session state
+    read_only: false                   # opencode writes session state
     security_opt:
-      - no-new-privileges:true           # prevent privilege escalation
+      - no-new-privileges:true         # prevent privilege escalation
     cap_drop:
-      - ALL                              # drop all Linux capabilities
+      - ALL                            # drop all Linux capabilities
+    cap_add:
+      - CHOWN                          # entrypoint: chown -R on /home/opencode
+      - SETUID                         # gosu + useradd/usermod
+      - SETGID                         # gosu + groupadd/groupmod
+      - DAC_OVERRIDE                   # allows root to chown/access files it doesn't own
     volumes:
       # Config files (read-only mounts)
       - ./config/opencode.json:/home/opencode/.config/opencode/opencode.json:ro
+      - ./.opencode/skills/write-worklog/SKILL.md:/home/opencode/.config/opencode/skills/write-worklog/SKILL.md:ro
       - ./config/auth.json:/home/opencode/.local/share/opencode/auth.json:ro
       # Your project workspace (read-write so opencode can edit files)
       - ./workspace:/home/opencode/workspace:rw

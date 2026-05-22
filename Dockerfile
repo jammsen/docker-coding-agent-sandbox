@@ -1,20 +1,44 @@
 FROM ubuntu:26.04@sha256:f3d28607ddd78734bb7f71f117f3c6706c666b8b76cbff7c9ff6e5718d46ff64
 
-ENV DEBIAN_FRONTEND=noninteractive
+ARG ENABLE_NODEJS=true
+ARG ENABLE_PYTHON=false
+ARG ENABLE_RUST=false
+ARG PYTHON_VERSION=3.13
 
-# Add here whatever dev-tools you need
+ENV DEBIAN_FRONTEND=noninteractive \
+    TZ=Europe/Berlin \
+    PUID=1000 \
+    PGID=1000 \
+    # Bake ARG values into the image so they're available at runtime too
+    ENABLE_NODEJS=${ENABLE_NODEJS} \
+    ENABLE_PYTHON=${ENABLE_PYTHON} \
+    ENABLE_RUST=${ENABLE_RUST} \
+    PYTHON_VERSION=${PYTHON_VERSION} \
+    # Pin tool data dirs explicitly — survives the HOME override in entrypoint.sh
+    CARGO_HOME=/home/opencode/.cargo \
+    RUSTUP_HOME=/home/opencode/.rustup \
+    # All user tool bins in PATH — inherited by every subprocess after exec gosu
+    PATH="/home/opencode/.local/bin:/home/opencode/.cargo/bin:/home/opencode/.opencode/bin:${PATH}"
+
+
+# Install basic tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
     git \
+    gosu \
     openssh-client \
-    nodejs \
-    npm \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get autoremove -y \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# # install uv for python development
-# COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
-# ENV PYTHON_VERSION="3.13"
+# Optional: Node.js — system-wide, stays as root
+RUN if [ "$ENABLE_NODEJS" = "true" ]; then \
+    apt-get update && apt-get install -y --no-install-recommends --no-install-suggests nodejs npm \
+    && apt-get autoremove -y \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*; \
+    fi
 
 # Ubuntu 26.04 ships with a default 'ubuntu' user at 1000:1000 — reuse it
 RUN usermod -l opencode ubuntu && \
@@ -26,21 +50,27 @@ RUN mkdir -p /home/opencode/.config/opencode \
     /home/opencode/workspace && \
     chown -R opencode:opencode /home/opencode
 
+# Switch to opencode user — HOME is now /home/opencode, installs land in the right place
 USER opencode
 WORKDIR /home/opencode
 
-# install rust via rustup tools as recomended
-# RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-# Make cargo/rustup available for subsequent RUN steps
-# ENV PATH="/home/opencode/.cargo/bin:/home/opencode/.opencode/bin:$PATH"
+# Optional: uv + Python
+RUN if [ "$ENABLE_PYTHON" = "true" ]; then \
+    curl -LsSf https://astral.sh/uv/install.sh | sh \
+    && uv python install ${PYTHON_VERSION}; \
+    fi
 
+# Optional: Rust — --no-modify-path because PATH is managed via ENV above
+RUN if [ "$ENABLE_RUST" = "true" ]; then \
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path; \
+    fi
+
+# Always: opencode itself
 RUN curl -fsSL https://opencode.ai/install | bash
 
-ENV PATH="/home/opencode/.opencode/bin:$PATH"
-ENV HOME=/home/opencode
+USER root
+WORKDIR /
 
-# # optional install python in a specific version
-# RUN uv python install ${PYTHON_VERSION}
+COPY --chmod=744 entrypoint.sh /
 
-WORKDIR /home/opencode/workspace
-ENTRYPOINT ["opencode"]
+ENTRYPOINT ["./entrypoint.sh"]

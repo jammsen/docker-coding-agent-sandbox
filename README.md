@@ -32,9 +32,13 @@ Create the following layout on your machine:
 ```
 opencode-sandbox/
 ├── Dockerfile
-├── docker-compose.yml
+├── compose.yml
+├── start.sh
 ├── config/
-│   └── opencode.json
+│   ├── opencode.json
+│   └── auth.json       ← provider auth tokens (mounted read-only)
+├── data/               ← opencode session state, persisted across runs
+├── .opencode/          ← skills and agent config (optional)
 └── workspace/          ← put your code projects here
 ```
 
@@ -46,14 +50,11 @@ opencode-sandbox/
 # Get the code
 git clone git@github.com:jammsen/docker-opencode-sandbox.git
 
-# Build the image (takes ~2-3 minutes on first run)
-docker compose build
+# Build and launch
+./start.sh
 
-# Launch OpenCode interactively
-docker compose run --rm opencode
-
-# Or as a oneliner
-docker compose build && docker compose run --rm opencode
+# Force a full rebuild (no layer cache) — useful when changing Dockerfile or feature toggles
+./start.sh --no-cache
 ```
 
 On first launch OpenCode opens the TUI. Press `/` to open the command palette.
@@ -134,15 +135,40 @@ This is a known Gemma 4 behavior with agentic tool use. Mitigations:
 
 ## Security Notes
 
-The container runs with the following restrictions:
+The container starts as root to handle setup (creating the user, fixing file ownership on mounted volumes), then permanently drops to an unprivileged user via `gosu` before your session begins. There is no way back to root after that point.
 
-- Non-root user (UID 1000)
-- `no-new-privileges` — prevents privilege escalation via setuid binaries
-- `cap_drop: ALL` — all Linux capabilities removed
-- Bridge networking only — no host network access
-- Filesystem access limited to `./workspace` on the host
+**Restrictions in place:**
+
+- **`no-new-privileges`** — once the container drops to the unprivileged user, no process inside the container can ever gain more permissions, even if it tries to run a `sudo` binary or a binary with special file capabilities. The kernel enforces this hard, before any code in such a binary even runs.
+- **`cap_drop: ALL`** — Linux capabilities are fine-grained units of root power (e.g. "change file ownership", "bind to privileged ports", "load kernel modules"). By default Docker grants containers a subset of these even without full root. Dropping all of them removes every one of those powers.
+- **`cap_add: CHOWN, SETUID, SETGID, DAC_OVERRIDE`** — only the four capabilities the entrypoint actually needs for its setup phase are added back. Once `gosu` drops to the non-root user, the kernel automatically clears the effective capability set on the UID transition, and `no-new-privileges` blocks any path to reclaiming them.
+- **`PUID` / `PGID`** — the in-container user is created at runtime with the same UID/GID as your host user. This ensures bind-mounted files in `./workspace` and `./data` have correct ownership on both sides of the mount.
+- Bridge networking only — isolated from the host network
+- Filesystem access limited to `./workspace` and `./data` on the host
 
 The model runs entirely on your local vLLM server. No data leaves your network.
+
+## Feature Toggles
+
+The image supports optional language runtimes controlled via build arguments. All toggles default to `false`.
+
+| ARG | Default | Effect |
+| --- | ------- | ------ |
+| `ENABLE_NODEJS` | `false` | Installs Node.js and npm via apt |
+| `ENABLE_PYTHON` | `false` | Installs `uv` and the configured Python version |
+| `ENABLE_RUST` | `false` | Installs Rust via `rustup` |
+| `PYTHON_VERSION` | `3.13` | Python version passed to `uv python install` |
+
+Enable a toggle at build time Dockerfile rewrite or via command-line args:
+
+```bash
+docker compose build --build-arg ENABLE_PYTHON=true --build-arg PYTHON_VERSION=3.12
+./start.sh --no-cache  # rebuild with new toggles
+```
+
+All runtimes are installed at **build time** under the `opencode` user, so the container starts instantly with no network downloads at runtime. The tool binaries are on `PATH` and their data directories (`CARGO_HOME`, `RUSTUP_HOME`) are pinned via environment variables so they survive the `HOME` override that redirects opencode's session state to the mounted workspace.
+
+---
 
 ## Using Tools and Skills
 
