@@ -1,6 +1,6 @@
 FROM ubuntu:26.04@sha256:f3d28607ddd78734bb7f71f117f3c6706c666b8b76cbff7c9ff6e5718d46ff64
 
-ARG ENABLE_NODEJS=true
+ARG ENABLE_NODEJS=false
 ARG ENABLE_PYTHON=false
 ARG ENABLE_RUST=false
 ARG PYTHON_VERSION=3.13
@@ -14,7 +14,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     ENABLE_PYTHON=${ENABLE_PYTHON} \
     ENABLE_RUST=${ENABLE_RUST} \
     PYTHON_VERSION=${PYTHON_VERSION} \
-    # Pin tool data dirs explicitly — survives the HOME override in entrypoint.sh
+    # Pin tool data dirs explicitly so subprocesses find language toolchains reliably
     CARGO_HOME=/home/opencode/.cargo \
     RUSTUP_HOME=/home/opencode/.rustup \
     # All user tool bins in PATH — inherited by every subprocess after exec gosu
@@ -27,6 +27,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     git \
     gosu \
+    ripgrep \
+    tzdata \
     openssh-client \
     && apt-get autoremove -y \
     && apt-get clean \
