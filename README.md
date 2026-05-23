@@ -6,7 +6,10 @@ Run OpenCode as a sandboxed, hardenend non-root Docker container connected to a 
 
 ---
 
+## Table of Contents
+
 - [A hardend Docker sandbox setup for opencode](#a-hardend-docker-sandbox-setup-for-opencode)
+  - [Table of Contents](#table-of-contents)
   - [Prerequisites](#prerequisites)
   - [Directory Structure](#directory-structure)
   - [Get, Build \& Run](#get-build--run)
