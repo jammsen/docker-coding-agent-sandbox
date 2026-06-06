@@ -3,12 +3,13 @@ set -euo pipefail
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 ASSUME_YES=false
+CONFIRMATION="Yes, do as I say!"
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/cleanup.sh [options]
+Usage: scripts/reset-sandbox.sh [options]
 
-Remove all generated OpenCode sandbox state from:
+Reset all generated OpenCode sandbox state from:
   - workspace/
   - data/
 
@@ -40,7 +41,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-confirm_cleanup() {
+confirm_reset() {
   if [[ "$ASSUME_YES" == "true" ]]; then
     return
   fi
@@ -57,15 +58,11 @@ Only these placeholder files will be preserved:
 This cannot be undone.
 EOF
 
-  read -r -p "Do you want to proceed? [y/N] " answer
-  case "$answer" in
-    y|Y|yes|YES)
-      ;;
-    *)
-      echo "Cleanup cancelled."
-      exit 0
-      ;;
-  esac
+  read -r -p "Type '${CONFIRMATION}' to proceed: " answer
+  if [[ "$answer" != "$CONFIRMATION" ]]; then
+    echo "Sandbox reset cancelled."
+    exit 0
+  fi
 }
 
 clean_dir() {
@@ -77,8 +74,8 @@ clean_dir() {
   touch "$keep"
 }
 
-confirm_cleanup
+confirm_reset
 clean_dir "$ROOT_DIR/workspace"
 clean_dir "$ROOT_DIR/data"
 
-echo "Cleaned workspace/ and data/ while preserving .gitkeep files."
+echo "Reset workspace/ and data/ while preserving .gitkeep files."

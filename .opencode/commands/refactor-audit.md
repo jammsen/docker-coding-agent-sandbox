@@ -4,7 +4,7 @@ agent: plan
 subtask: true
 ---
 
-Analyze the target given in `$ARGUMENTS` for code smells, duplicate code, unnecessary complexity, and technical debt.
+Analyze the target given in `$ARGUMENTS` for code smells, duplicate code, unnecessary complexity, security risks, and technical debt.
 
 If `$ARGUMENTS` is empty, inspect the current git diff first and then the smallest relevant surrounding files.
 
@@ -15,6 +15,6 @@ Produce a concise audit with:
 1. Findings ordered by impact
 2. Exact files and symbols involved
 3. Suggested refactor steps
-4. Behavioral risks and verification needed
+4. Security risks, behavioral risks, and verification needed
 
 Ask the user which items should be implemented before making changes.

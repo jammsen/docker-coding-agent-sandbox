@@ -23,13 +23,13 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 # Install basic tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
     ca-certificates \
+    curl \
     git \
     gosu \
+    openssh-client \
     ripgrep \
     tzdata \
-    openssh-client \
     && apt-get autoremove -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*

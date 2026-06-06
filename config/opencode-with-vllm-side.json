@@ -41,7 +41,7 @@
   "small_model": "vllm-side/qwen3-14b",
   "agent": {
     "build": {
-      "prompt": "Follow the sandbox rules from /home/opencode/.config/opencode/AGENTS.md. Before finishing any task that changes files, read WORKLOG.md if present and append a concise entry with the current Europe/Berlin timestamp from `TZ=Europe/Berlin date \"+%d.%m.%Y, %H:%M (%Z)\"`, changed files, concrete findings, and pending follow-ups.",
+      "prompt": "All projects are located under /home/opencode/workspace. Work only there, with no exceptions, unless the user explicitly asks for access outside the sandbox. Follow the sandbox rules from /home/opencode/.config/opencode/AGENTS.md. Before finishing any task that changes files, read WORKLOG.md in the active project directory if present and append a concise entry with the current Europe/Berlin timestamp from `TZ=Europe/Berlin date \"+%d.%m.%Y, %H:%M (%Z)\"`, changed files, concrete findings, and pending follow-ups.",
       "permission": {
         "webfetch": "ask",
         "websearch": "allow"

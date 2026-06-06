@@ -52,7 +52,7 @@ if [[ "$NEEDS_CHOWN" = "true" ]]; then
 fi
 
 OPENCODE_WORKSPACE="/home/opencode/workspace"
-echo "> Starting opencode in $OPENCODE_WORKSPACE"
-cd "$OPENCODE_WORKSPACE"
+echo "> Set HOME to $OPENCODE_WORKSPACE (mounted workspace volume)"
+export HOME="$OPENCODE_WORKSPACE"
 
-exec gosu $APP_USER:$APP_GROUP opencode "$@"
+exec gosu $APP_USER:$APP_GROUP opencode

@@ -1,6 +1,6 @@
 # A hardened Docker sandbox setup for opencode
 
-With OpenCode + vLLM local model configs
+With OpenCode + vLLM (Qwen3.6 35B A3B) configs
 
 Run OpenCode as a sandboxed, hardened non-root Docker container connected to a self-hosted vLLM inference server. No cloud API keys required.
 
@@ -16,6 +16,7 @@ Run OpenCode as a sandboxed, hardened non-root Docker container connected to a s
   - [Verify Everything Works](#verify-everything-works)
   - [Usage Tips](#usage-tips)
     - [Working with files](#working-with-files)
+    - [Resetting sandbox state](#resetting-sandbox-state)
     - [Modes](#modes)
     - [Context window awareness](#context-window-awareness)
   - [Troubleshooting](#troubleshooting)
@@ -99,12 +100,16 @@ Inside the TUI:
 
 ### Working with files
 
-Drop files into `./workspace/` on your host. They appear at `/home/opencode/workspace/` inside the container. OpenCode starts in this directory; the global config still lives under `/home/opencode/.config/opencode/`.
+Drop files into `./workspace/` on your host. They appear at `/home/opencode/workspace/` inside the container. OpenCode treats this directory as `HOME`; the global config still lives under `/home/opencode/.config/opencode/`.
 
 ```bash
 # Copy a project into the sandbox
 cp -r ~/myproject ./workspace/myproject
 ```
+
+### Resetting sandbox state
+
+Use `scripts/reset-sandbox.sh` only when you intentionally want to remove generated local state from `./workspace/` and `./data/`. It preserves the `.gitkeep` placeholders and requires typing `Yes, do as I say!` before deleting anything.
 
 ### Modes
 
@@ -189,7 +194,7 @@ docker compose build --build-arg ENABLE_PYTHON=true --build-arg PYTHON_VERSION=3
 ./start.sh --no-cache  # rebuild with new toggles
 ```
 
-All runtimes are installed at **build time** under the `opencode` user, so the container starts instantly with no language runtime downloads at startup. Base tooling includes `ripgrep` for OpenCode search tools and `tzdata` for correct Europe/Berlin timestamps. The tool binaries are on `PATH` and their data directories (`CARGO_HOME`, `RUSTUP_HOME`) are pinned via environment variables.
+All runtimes are installed at **build time** under the `opencode` user, so the container starts instantly with no language runtime downloads at startup. Base tooling includes `ripgrep` for OpenCode search tools and `tzdata` for correct Europe/Berlin timestamps. The tool binaries are on `PATH` and their data directories (`CARGO_HOME`, `RUSTUP_HOME`) are pinned via environment variables so they survive the `HOME` override that redirects opencode's session state to the mounted workspace.
 
 ---
 
