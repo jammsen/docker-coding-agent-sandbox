@@ -93,4 +93,4 @@ if [[ "$TOOL" = "opencode" ]]; then
     export HOME="$OPENCODE_WORKSPACE"
 fi
 
-exec /usr/local/sbin/gosu "$APP_USER":"$APP_GROUP" "$TOOL"
+exec /usr/sbin/gosu "$APP_USER":"$APP_GROUP" "$TOOL"
