@@ -18,7 +18,7 @@ if [[ "${EUID}" -ne 0 ]]; then
 fi
 
 # Validate PUID/PGID for positive integer values
-if ! [[ "${PUID}" =~ ^[1-9][0-9]*$ ]] || ! [[ "${PGID}" =~ ^[1-9][0-9]*$ ]]; then
+if ! [[ "${PUID:-}" =~ ^[1-9][0-9]*$ ]] || ! [[ "${PGID:-}" =~ ^[1-9][0-9]*$ ]]; then
     echo ">>> [Config] PUID=${PUID} PGID=${PGID} — Must be positive integers" 
     echo "    Also running the application user as root is not supported."
     echo "    This container is designed to drop privileges after setup. Please set positive integer values for PUID and PGID."
@@ -69,7 +69,7 @@ fi
 
 TOOL="opencode"
 
-if [[ "$ENABLE_OMP" = "true" ]] && gosu "$APP_USER":"$APP_GROUP" bash -c 'command -v omp' &>/dev/null; then
+if [[ "${ENABLE_OMP:-}" = "true" ]] && gosu "$APP_USER":"$APP_GROUP" bash -c 'command -v omp' &>/dev/null; then
     echo ""
     echo "Select which tool to start:"
     echo "  1. opencode  (default)"
