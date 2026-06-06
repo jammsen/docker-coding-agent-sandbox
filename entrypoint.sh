@@ -1,16 +1,25 @@
 #!/usr/bin/env bash
 # https://stackoverflow.com/questions/27669950/difference-between-euid-and-uid
-set -e
+set -euo pipefail
+umask 0027
 
 APP_USER=opencode
 APP_GROUP=opencode
 APP_HOME=/home/$APP_USER
+readonly APP_USER APP_GROUP APP_HOME
+
 CURRENT_GID=$(getent group "$APP_GROUP" 2>/dev/null | cut -d: -f3)
 CURRENT_UID=$(id -u "$APP_USER" 2>/dev/null || echo "")
 
 if [[ "${EUID}" -ne 0 ]]; then
     echo ">>> [Entrypoint] Requires root to run setup (creating users, fixing file ownership)."
     echo "    The container process is currently running as EUID=${EUID}. Please start the container without a --user override."
+    exit 1
+fi
+
+# Validate PUID/PGID for positive integer values
+if ! [[ "${PUID}" =~ ^[1-9][0-9]*$ ]] || ! [[ "${PGID}" =~ ^[1-9][0-9]*$ ]]; then
+    echo ">>> [Config] PUID=${PUID} PGID=${PGID} — must be positive integers."
     exit 1
 fi
 
@@ -54,6 +63,13 @@ fi
 # HOME → workspace so opencode session state lands on the mounted volume
 # CARGO_HOME/RUSTUP_HOME are pinned in the image ENV, so tools still find their data
 OPENCODE_WORKSPACE="/home/opencode/workspace"
+readonly OPENCODE_WORKSPACE
+export OPENCODE_WORKSPACE
+
+if [[ ! -d "$OPENCODE_WORKSPACE" ]]; then
+    echo ">>> [Entrypoint] Workspace directory '$OPENCODE_WORKSPACE' not found — is the volume mounted?"
+    exit 1
+fi
 
 TOOL="opencode"
 
@@ -68,6 +84,13 @@ if [[ "$ENABLE_OMP" = "true" ]] && gosu "$APP_USER":"$APP_GROUP" bash -c 'comman
         2) TOOL="omp" ;;
         *) TOOL="opencode" ;;
     esac
+    case "$SELECTION" in
+        1|"") TOOL="opencode" ;;   # forcing explicit numbered input for opencode since it's the default and empty input is common
+        2)    TOOL="omp" ;;
+        *)
+        echo ">>> Invalid selection '$SELECTION' — defaulting to opencode"
+        TOOL="opencode" ;;
+    esac
     echo ""
 fi
 
@@ -78,4 +101,4 @@ if [[ "$TOOL" = "opencode" ]]; then
     export HOME="$OPENCODE_WORKSPACE"
 fi
 
-exec gosu "$APP_USER":"$APP_GROUP" "$TOOL"
+exec /usr/local/sbin/gosu "$APP_USER":"$APP_GROUP" "$TOOL"
