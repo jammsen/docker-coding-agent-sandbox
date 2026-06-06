@@ -81,10 +81,6 @@ if [[ "$ENABLE_OMP" = "true" ]] && gosu "$APP_USER":"$APP_GROUP" bash -c 'comman
     echo ""
     read -r -p "Enter selection [1]: " SELECTION
     case "$SELECTION" in
-        2) TOOL="omp" ;;
-        *) TOOL="opencode" ;;
-    esac
-    case "$SELECTION" in
         1|"") TOOL="opencode" ;;   # forcing explicit numbered input for opencode since it's the default and empty input is common
         2)    TOOL="omp" ;;
         *)
