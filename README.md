@@ -1,14 +1,14 @@
-# A hardend Docker sandbox setup for opencode
+# A hardened Docker sandbox setup for opencode
 
-With OpenCode + vLLM (Gemma 4 26B MoE) configs
+With OpenCode + vLLM (Qwen3.6 35B A3B) configs
 
-Run OpenCode as a sandboxed, hardenend non-root Docker container connected to a self-hosted vLLM inference server. No cloud API keys required.
+Run OpenCode as a sandboxed, hardened non-root Docker container connected to a self-hosted vLLM inference server. No cloud API keys required.
 
 ---
 
 ## Table of Contents
 
-- [A hardend Docker sandbox setup for opencode](#a-hardend-docker-sandbox-setup-for-opencode)
+- [A hardened Docker sandbox setup for opencode](#a-hardened-docker-sandbox-setup-for-opencode)
   - [Table of Contents](#table-of-contents)
   - [Prerequisites](#prerequisites)
   - [Directory Structure](#directory-structure)
@@ -16,12 +16,14 @@ Run OpenCode as a sandboxed, hardenend non-root Docker container connected to a 
   - [Verify Everything Works](#verify-everything-works)
   - [Usage Tips](#usage-tips)
     - [Working with files](#working-with-files)
+    - [Resetting sandbox state](#resetting-sandbox-state)
     - [Modes](#modes)
     - [Context window awareness](#context-window-awareness)
   - [Troubleshooting](#troubleshooting)
   - [Security Notes](#security-notes)
   - [Feature Toggles](#feature-toggles)
   - [Using Tools and Skills](#using-tools-and-skills)
+    - [Commands](#commands)
     - [Skills](#skills)
 
 
@@ -37,9 +39,9 @@ Verify your vLLM is reachable before starting:
 curl http://10.0.0.13:8000/v1/models
 ```
 
-You should see your model ID in the response (e.g. `gemma4-26b-a4b`).
+You should see your model ID in the response (e.g. `qwen3.6-35b`).
 
-Use the exact `"id"` value from the response — e.g. `gemma4-26b-a4b`.
+Use the exact `"id"` value from the response — e.g. `qwen3.6-35b`.
 
 **Finding your context size:**
 The `max_model_len` field in the `/v1/models` response is your context limit. Use that value for `"context"`.
@@ -57,9 +59,10 @@ opencode-sandbox/
 ├── start.sh
 ├── config/
 │   ├── opencode.json
+│   ├── AGENTS.md       ← global sandbox rules (mounted read-only)
 │   └── auth.json       ← provider auth tokens (mounted read-only)
 ├── data/               ← opencode session state, persisted across runs
-├── .opencode/          ← skills and agent config (optional)
+├── .opencode/          ← global sandbox commands and skills (mounted read-only)
 └── workspace/          ← put your code projects here
 ```
 
@@ -88,7 +91,7 @@ Inside the TUI:
 
 1. Press `/model` — your model should appear under your provider name with an orange dot
 2. Type `hello, what model are you?` — the response should mention your model ID
-3. Check the status bar at the bottom — it should show `Gemma 4 26B MoE · vLLM (Gemma4 local)`
+3. Check the status bar at the bottom — it should show your configured model, for example `Qwen3.6 35B A3B · vLLM`
 4. Check the right panel — `$0.00 spent` confirms no cloud API is being used
 
 ---
@@ -97,12 +100,16 @@ Inside the TUI:
 
 ### Working with files
 
-Drop files into `./workspace/` on your host. They appear at `~/workspace/` inside the container. OpenCode operates within this directory and cannot access anything outside it.
+Drop files into `./workspace/` on your host. They appear at `/home/opencode/workspace/` inside the container. OpenCode treats this directory as `HOME`; the global config still lives under `/home/opencode/.config/opencode/`.
 
 ```bash
 # Copy a project into the sandbox
 cp -r ~/myproject ./workspace/myproject
 ```
+
+### Resetting sandbox state
+
+Use `scripts/reset-sandbox.sh` only when you intentionally want to remove generated local state from `./workspace/` and `./data/`. It preserves the `.gitkeep` placeholders and requires typing `Yes, do as I say!` before deleting anything.
 
 ### Modes
 
@@ -146,7 +153,7 @@ If this fails, your vLLM IP is unreachable from the container. Use the actual ho
 
 **Tool calling loops or model halts mid-task**
 
-This is a known Gemma 4 behavior with agentic tool use. Mitigations:
+Some local models can struggle with long agentic tool-use loops. Mitigations:
 
 - Prefer **Ask mode** for questions and code review that don't require file editing
 - For Build mode, give explicit step-by-step instructions rather than open-ended goals
@@ -165,7 +172,7 @@ The container starts as root to handle setup (creating the user, fixing file own
 - **`cap_add: CHOWN, SETUID, SETGID, DAC_OVERRIDE`** — only the four capabilities the entrypoint actually needs for its setup phase are added back. Once `gosu` drops to the non-root user, the kernel automatically clears the effective capability set on the UID transition, and `no-new-privileges` blocks any path to reclaiming them.
 - **`PUID` / `PGID`** — the in-container user is created at runtime with the same UID/GID as your host user. This ensures bind-mounted files in `./workspace` and `./data` have correct ownership on both sides of the mount.
 - Bridge networking only — isolated from the host network
-- Filesystem access limited to `./workspace` and `./data` on the host
+- Writable filesystem access is limited to `./workspace` and `./data` on the host. Config, commands, skills, and auth are mounted read-only.
 
 The model runs entirely on your local vLLM server. No data leaves your network.
 
@@ -187,18 +194,34 @@ docker compose build --build-arg ENABLE_PYTHON=true --build-arg PYTHON_VERSION=3
 ./start.sh --no-cache  # rebuild with new toggles
 ```
 
-All runtimes are installed at **build time** under the `opencode` user, so the container starts instantly with no network downloads at runtime. The tool binaries are on `PATH` and their data directories (`CARGO_HOME`, `RUSTUP_HOME`) are pinned via environment variables so they survive the `HOME` override that redirects opencode's session state to the mounted workspace.
+All runtimes are installed at **build time** under the `opencode` user, so the container starts instantly with no language runtime downloads at startup. Base tooling includes `ripgrep` for OpenCode search tools and `tzdata` for correct Europe/Berlin timestamps. The tool binaries are on `PATH` and their data directories (`CARGO_HOME`, `RUSTUP_HOME`) are pinned via environment variables so they survive the `HOME` override that redirects opencode's session state to the mounted workspace.
 
 ---
 
 ## Using Tools and Skills
 
+### Commands
+
+Sandbox-wide commands and skills are mounted globally:
+
+```yaml
+- ./config/AGENTS.md:/home/opencode/.config/opencode/AGENTS.md:ro
+- ./.opencode/commands:/home/opencode/.config/opencode/commands:ro
+- ./.opencode/skills:/home/opencode/.config/opencode/skills:ro
+```
+
+This makes the commands available regardless of which project under `./workspace/` you open. Project-specific commands, skills, and `AGENTS.md` files can still live inside the project directory.
+
+`AGENTS.md` is intentionally short: it gives global orientation. Repeatable process requirements live directly in the commands, because local models follow concrete command workflows more reliably than broad standing instructions.
+
+Available sandbox commands:
+
+- `/refactor-audit <target>` — analyze refactor opportunities without editing files
+- `/refactor-apply <approved scope>` — apply one focused approved refactor, verify it, and update `WORKLOG.md`
+- `/git-commit` — review, document, and commit approved changes using Conventional Commits
+
 ### Skills
 
-Skills a special capabilities for an Agent that tells him how to do things or how to handle tools.
-They have a specific Format and a SKILL.md file is mandatory.
-Read more about Skills here https://agentskills.io/home
+Skills are reusable on-demand capabilities for an agent. They use one directory per skill with a mandatory `SKILL.md`.
 
-You have 2 options to use them
-- just copy over the `.opencode` folder into your workspace. Opencode will then recognize them
-- just add them to the worklog example skill in the `compose.yml`
+The included `write-worklog` skill provides a structured `WORKLOG.md` entry format for ad-hoc tasks. Command-driven workflows inline their own worklog format so they do not depend on automatic skill selection.

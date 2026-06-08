@@ -51,10 +51,10 @@ if [[ "$NEEDS_CHOWN" = "true" ]]; then
     find "$APP_HOME" -xdev -exec chown "$APP_USER":"$APP_GROUP" {} +
 fi
 
-# HOME → workspace so opencode session state lands on the mounted volume
-# CARGO_HOME/RUSTUP_HOME are pinned in the image ENV, so tools still find their data
 OPENCODE_WORKSPACE="/home/opencode/workspace"
+export OPENCODE_WORKSPACE 
+
 echo "> Set HOME to $OPENCODE_WORKSPACE (mounted workspace volume)"
 export HOME="$OPENCODE_WORKSPACE"
 
-exec gosu $APP_USER:$APP_GROUP "opencode"
+exec gosu $APP_USER:$APP_GROUP opencode

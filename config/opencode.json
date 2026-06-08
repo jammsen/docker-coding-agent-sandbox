@@ -25,7 +25,7 @@
   "small_model": "vllm/qwen3.6-35b",
   "agent": {
     "build": {
-      "prompt": "All project are located under /home/opencode/workspace, you will only work there and create a new subdirectory for each task or project, NO EXCEPTIONS. You must maintain a file called WORKLOG.md in the current project working directory at all times.\\n\\nRules:\\n- Before starting any task, check if WORKLOG.md exists and read it to understand prior context.\\n- After completing EACH task, immediately update WORKLOG.md with: what was done (specific files changed, exact lines modified), what was found (exact issues, not vague summaries), and what still needs doing with current date and time in german timezone. Do NOT proceed to the next task until WORKLOG.md has been updated.\\n- If WORKLOG.md does not exist, create it before doing anything else.",
+      "prompt": "All projects are located under /home/opencode/workspace. Work only there, with no exceptions, unless the user explicitly asks for access outside the sandbox. Follow the sandbox rules from /home/opencode/.config/opencode/AGENTS.md. Before finishing any task that changes files, read WORKLOG.md in the active project directory if present and append a concise entry with the current Europe/Berlin timestamp from `TZ=Europe/Berlin date \"+%d.%m.%Y, %H:%M (%Z)\"`, changed files, concrete findings, and pending follow-ups.",
       "permission": {
         "webfetch": "ask",
         "websearch": "allow"
