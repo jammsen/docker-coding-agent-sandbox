@@ -1,0 +1,4 @@
+modelRoles:
+  default: vllm/qwen3.6-35b
+  smol: vllm/qwen3.6-35b
+  slow: vllm/qwen3.6-35b

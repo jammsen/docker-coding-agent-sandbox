@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # https://stackoverflow.com/questions/27669950/difference-between-euid-and-uid
-set -e
+set -euo pipefail
+umask 0027
 
 APP_USER=opencode
 APP_GROUP=opencode
 APP_HOME=/home/$APP_USER
+readonly APP_USER APP_GROUP APP_HOME
+
 CURRENT_GID=$(getent group "$APP_GROUP" 2>/dev/null | cut -d: -f3)
 CURRENT_UID=$(id -u "$APP_USER" 2>/dev/null || echo "")
 
@@ -14,9 +17,11 @@ if [[ "${EUID}" -ne 0 ]]; then
     exit 1
 fi
 
-if [[ "${PUID}" -eq 0 ]] || [[ "${PGID}" -eq 0 ]]; then
-    echo ">>> [Config] PUID=${PUID} PGID=${PGID} — Running the application user as root is not supported."
-    echo "    This container is designed to drop privileges after setup. Please set non-zero values for PUID and PGID."
+# Validate PUID/PGID for positive integer values
+if ! [[ "${PUID:-}" =~ ^[1-9][0-9]*$ ]] || ! [[ "${PGID:-}" =~ ^[1-9][0-9]*$ ]]; then
+    echo ">>> [Config] PUID=${PUID:-<unset>} PGID=${PGID:-<unset>} — Must be positive integers"
+    echo "    Also running the application user as root is not supported."
+    echo "    This container is designed to drop privileges after setup. Please set positive integer values for PUID and PGID."
     exit 1
 fi
 
@@ -52,9 +57,38 @@ if [[ "$NEEDS_CHOWN" = "true" ]]; then
 fi
 
 OPENCODE_WORKSPACE="/home/opencode/workspace"
-export OPENCODE_WORKSPACE 
+readonly OPENCODE_WORKSPACE
+export OPENCODE_WORKSPACE
 
-echo "> Set HOME to $OPENCODE_WORKSPACE (mounted workspace volume)"
-export HOME="$OPENCODE_WORKSPACE"
+if [[ ! -d "$OPENCODE_WORKSPACE" ]]; then
+    echo ">>> [Entrypoint] Workspace directory '$OPENCODE_WORKSPACE' not found — is the volume mounted?"
+    exit 1
+fi
 
-exec gosu $APP_USER:$APP_GROUP opencode
+TOOL="opencode"
+
+if [[ "${ENABLE_OMP:-}" = "true" ]] && gosu "$APP_USER":"$APP_GROUP" bash -c 'command -v omp' &>/dev/null; then
+    echo ""
+    echo "Select which tool to start:"
+    echo "  1. opencode  (default)"
+    echo "  2. omp"
+    echo ""
+    read -r -p "Enter selection [1]: " SELECTION
+    case "$SELECTION" in
+        1|"") TOOL="opencode" ;;   # forcing explicit numbered input for opencode since it's the default and empty input is common
+        2)    TOOL="omp" ;;
+        *)
+        echo ">>> Invalid selection '$SELECTION' — defaulting to opencode"
+        TOOL="opencode" ;;
+    esac
+    echo ""
+fi
+
+# HOME → workspace so opencode session state lands on the mounted volume.
+# omp keeps the real HOME (/home/opencode) so it finds its config/logs there.
+if [[ "$TOOL" = "opencode" ]]; then
+    echo "> Set HOME to $OPENCODE_WORKSPACE (mounted workspace volume)"
+    export HOME="$OPENCODE_WORKSPACE"
+fi
+
+exec /usr/sbin/gosu "$APP_USER":"$APP_GROUP" "$TOOL"

@@ -1,0 +1,11 @@
+providers:
+  vllm:
+    baseUrl: "http://10.0.0.13:8000/v1"
+    apiKey: "dummy"
+    api: openai-completions
+    auth: apiKey
+    models:
+      - id: qwen3.6-35b
+        name: "Qwen3.6 35B A3B"
+        contextWindow: 131072
+        maxTokens: 8192
