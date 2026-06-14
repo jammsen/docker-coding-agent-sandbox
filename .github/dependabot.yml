@@ -10,5 +10,3 @@ updates:
       - "/"
     schedule:
       interval: "daily"
-    patterns: ["*"]
-    multi-ecosystem-group: "all-dependencies"
