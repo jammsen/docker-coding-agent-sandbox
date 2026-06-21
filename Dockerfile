@@ -9,6 +9,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     # Pin tool data dirs explicitly so subprocesses find language toolchains reliably
     CARGO_HOME=/home/agent/.cargo \
     RUSTUP_HOME=/home/agent/.rustup \
+    # Absolute path so Playwright finds its browsers even when opencode redirects HOME at runtime
+    PLAYWRIGHT_BROWSERS_PATH=/home/agent/.cache/ms-playwright \
     # All user tool bins in PATH — inherited by every subprocess after exec gosu
     PATH="/home/agent/.local/bin:/home/agent/.cargo/bin:/home/agent/.opencode/bin:${PATH}"
 
@@ -48,6 +50,36 @@ RUN apt-get update && apt-get install -y --no-install-recommends --no-install-su
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
+# Chromium headless system libraries — required for Playwright
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    fonts-liberation \
+    fonts-noto-color-emoji \
+    libasound2t64 \
+    libatk-bridge2.0-0t64 \
+    libatk1.0-0t64 \
+    libatspi2.0-0t64 \
+    libcairo2 \
+    libcups2t64 \
+    libdbus-1-3 \
+    libdrm2 \
+    libgbm1 \
+    libglib2.0-0t64 \
+    libnspr4 \
+    libnss3 \
+    libpango-1.0-0 \
+    libx11-6 \
+    libxcb1 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxext6 \
+    libxfixes3 \
+    libxkbcommon0 \
+    libxrandr2 \
+    xdg-utils \
+    && apt-get autoremove -y \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
 # Ubuntu 26.04 ships with a default 'ubuntu' user at 1000:1000 — reuse it
 RUN usermod -l agent ubuntu && \
     groupmod -n agent ubuntu && \
@@ -79,6 +111,10 @@ ARG PYTHON_VERSION=3.13
 ENV PYTHON_VERSION=${PYTHON_VERSION}
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
     && uv python install ${PYTHON_VERSION}
+
+# Playwright — install Chromium browser binary at build time (system libs already installed above)
+# --no-sandbox is required at runtime due to cap_drop: ALL — see AGENTS.md
+RUN npx -y playwright install chromium
 
 USER root
 WORKDIR /

@@ -20,6 +20,29 @@ Use the mounted sandbox commands for repeatable workflows when they fit the task
 
 Do not treat commands as mandatory for every task. They are shortcuts for user-invoked workflows and should not replace direct, focused work when the user has already given a clear instruction.
 
+## Using Playwright
+
+Playwright with Chromium is pre-installed. Because this container runs with `cap_drop: ALL`, Chromium's built-in process sandbox cannot function — you **must** disable it or Chromium will refuse to start:
+
+```typescript
+// playwright.config.ts or inside test/script launch options
+use: {
+  launchOptions: {
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  },
+},
+```
+
+Or when launching programmatically:
+
+```typescript
+const browser = await chromium.launch({
+  args: ['--no-sandbox', '--disable-setuid-sandbox'],
+});
+```
+
+The browser binary is at `$PLAYWRIGHT_BROWSERS_PATH` (`/home/agent/.cache/ms-playwright`). Do not move or reinstall it — it is baked into the image.
+
 ## Running Background Servers
 
 Port 1111 is the single externally reachable port. If the user wants to expose a server (dev server, HTTP API, or any other service), bind it to `0.0.0.0:1111`.
