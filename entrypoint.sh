@@ -88,53 +88,33 @@ if [[ ${#AVAILABLE_TOOLS[@]} -eq 0 ]]; then
     exit 1
 fi
 
-# If DEFAULT_TOOL is set (e.g. via --tool in start.sh), skip the interactive menu.
-TOOL=""
+# If DEFAULT_TOOL is set, validate it now so we fail fast before wetty starts.
 if [[ -n "${DEFAULT_TOOL:-}" ]]; then
+    _VALID=false
     for _t in "${AVAILABLE_TOOLS[@]}"; do
         if [[ "$_t" = "$DEFAULT_TOOL" ]]; then
-            TOOL="$_t"
+            _VALID=true
             break
         fi
     done
-    if [[ -z "$TOOL" ]]; then
+    if [[ "$_VALID" = "false" ]]; then
         echo ">>> [Entrypoint] DEFAULT_TOOL='$DEFAULT_TOOL' not available. Available: ${AVAILABLE_TOOLS[*]}"
         exit 1
     fi
-    echo "> Using tool '$TOOL' (from DEFAULT_TOOL)"
-elif [[ ${#AVAILABLE_TOOLS[@]} -eq 1 ]]; then
-    TOOL="${AVAILABLE_TOOLS[0]}"
-else
-    echo ""
-    echo "Select which tool to start:"
-    for i in "${!AVAILABLE_TOOLS[@]}"; do
-        if [[ $i -eq 0 ]]; then
-            echo "  $((i+1)). ${AVAILABLE_TOOLS[$i]}  (default)"
-        else
-            echo "  $((i+1)). ${AVAILABLE_TOOLS[$i]}"
-        fi
-    done
-    echo ""
-    read -r -p "Enter selection [1]: " SELECTION
-    case "$SELECTION" in
-        ""|1) TOOL="${AVAILABLE_TOOLS[0]}" ;;
-        *)
-            if [[ "$SELECTION" =~ ^[0-9]+$ ]] && [[ "$SELECTION" -ge 2 ]] && [[ "$((SELECTION-1))" -lt "${#AVAILABLE_TOOLS[@]}" ]]; then
-                TOOL="${AVAILABLE_TOOLS[$((SELECTION-1))]}"
-            else
-                echo ">>> Invalid selection '$SELECTION' — defaulting to ${AVAILABLE_TOOLS[0]}"
-                TOOL="${AVAILABLE_TOOLS[0]}"
-            fi
-            ;;
-    esac
-    echo ""
 fi
 
-# HOME → workspace so opencode session state lands on the mounted volume.
-# omp keeps the real HOME (/home/agent) so it finds its config/logs there.
-if [[ "$TOOL" = "opencode" ]]; then
-    echo "> Set HOME to $OPENCODE_WORKSPACE (mounted workspace volume)"
-    export HOME="$OPENCODE_WORKSPACE"
-fi
+# Export available tools as a space-separated string — inherited by agent-session.sh via wetty.
+export AVAILABLE_TOOLS_ENV="${AVAILABLE_TOOLS[*]}"
 
-exec /usr/sbin/gosu "$APP_USER":"$APP_GROUP" "$TOOL"
+echo "> Starting WeTTY browser terminal on port 1111..."
+echo "> Connect at: https://<your-server-ip>:1111  (accept the self-signed cert warning once)"
+# wetty must run as root so it detects localhost and uses local/command mode instead of SSH.
+# agent-session.sh drops to the agent user immediately on startup.
+exec wetty \
+    --port 1111 \
+    --host 0.0.0.0 \
+    --command /agent-session.sh \
+    --title "Agentic Harness Sandbox" \
+    --allow-iframe \
+    --ssl-key /etc/wetty/key.pem \
+    --ssl-cert /etc/wetty/cert.pem

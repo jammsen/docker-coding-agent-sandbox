@@ -9,10 +9,14 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       - HOME=/home/agent
+      - SHELL=/bin/bash
+      - USER=agent
+      - LANG=C.UTF-8          # ensures TUI apps (opencode, omp) render Unicode box-drawing chars
+      - LC_ALL=C.UTF-8
       - TOOLS=opencode,omp   # order defines menu order and default (first = default)
-    init: true                         # tini as PID 1 — reaps zombie child processes
-    stdin_open: true
-    tty: true
+      - DEFAULT_TOOL=${DEFAULT_TOOL:-}  # pass-through from host shell; empty = show menu in browser
+    init: true                           # tini as PID 1 — reaps zombie child processes
+    restart: unless-stopped              # auto-restart on failure or host reboot
     read_only: false                   # opencode writes session state
     security_opt:
       - no-new-privileges:true         # prevent privilege escalation
@@ -24,7 +28,8 @@ services:
       - SETGID                         # gosu + groupadd/groupmod
       - DAC_OVERRIDE                   # allows root to chown/access files it doesn't own
     ports:
-      - "1111:1111/tcp"
+      - "1111:1111/tcp"   # wetty browser terminal — open http://<host>:1111
+      - "3000:3000/tcp"   # agent dev server port (Vite, Express, Django, Flask, etc.)
     volumes:
       # Config files (read-only mounts)
       - ./config/opencode.json:/home/agent/.config/opencode/opencode.json:ro

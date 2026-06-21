@@ -30,10 +30,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     lsof \
     netcat-openbsd \
     openssh-client \
+    openssl \
     pkg-config \
     postgresql-client \
     procps \
     ripgrep \
+    screen \
     sqlite3 \
     tree \
     tzdata \
@@ -49,6 +51,29 @@ RUN apt-get update && apt-get install -y --no-install-recommends --no-install-su
     && apt-get autoremove -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# WeTTY — browser-based terminal served on port 1111
+RUN npm install -g wetty@3.1.0
+
+# Patch wetty's env.js which assumes "env (GNU coreutils)" version string.
+# Ubuntu 26.04 ships uutils coreutils whose version output is "env (uutils coreutils) 0.8.0",
+# causing an uncaughtException when the string split returns undefined.
+# Returning 0 is safe: env version >=9 is only needed for the -S flag, which we never use.
+RUN sed -i \
+    '/resolve(parseInt(stdout\.split/s/.*/        resolve(0);/' \
+    /usr/local/lib/node_modules/wetty/build/server/spawn/env.js \
+    && grep -q 'resolve(0)' /usr/local/lib/node_modules/wetty/build/server/spawn/env.js \
+    && echo 'env.js patched OK'
+
+# Self-signed TLS cert for WeTTY — avoids browser HTTPS-upgrade blocking on HTTP
+# Browsers show a one-time "proceed anyway" warning, then work fine.
+RUN mkdir -p /etc/wetty \
+    && openssl req -x509 -newkey rsa:4096 \
+       -keyout /etc/wetty/key.pem \
+       -out /etc/wetty/cert.pem \
+       -days 3650 -nodes \
+       -subj "/CN=agentic-harness-sandbox" \
+    && chmod 644 /etc/wetty/key.pem /etc/wetty/cert.pem
 
 # Chromium headless system libraries — required for Playwright
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -120,5 +145,6 @@ USER root
 WORKDIR /
 
 COPY --chmod=744 entrypoint.sh /
+COPY --chmod=755 agent-session.sh /agent-session.sh
 
 ENTRYPOINT ["./entrypoint.sh"]

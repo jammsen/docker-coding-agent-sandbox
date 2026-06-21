@@ -4,10 +4,10 @@ modelRoles:
   slow: vllm/qwen3.6-35b
 symbolPreset: unicode
 theme: 
-  dark: dark-abyss
+  dark: pearl
 setupVersion: 1
 # Context management — prevent hanging at large contexts
-context:
+context: 
   maxTokens: 120000
   summarizeAt: 90000
   summaryTokens: 8000

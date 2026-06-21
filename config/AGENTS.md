@@ -45,7 +45,7 @@ The browser binary is at `$PLAYWRIGHT_BROWSERS_PATH` (`/home/agent/.cache/ms-pla
 
 ## Running Background Servers
 
-Port 1111 is the single externally reachable port. If the user wants to expose a server (dev server, HTTP API, or any other service), bind it to `0.0.0.0:1111`.
+Port **3000** is the externally reachable port for agent-hosted servers. Port 1111 is reserved for the WeTTY browser terminal. If the user wants to expose a server (dev server, HTTP API, or any other service), bind it to `0.0.0.0:3000`.
 
 **Always check before starting a server** — do not blindly launch a new process:
 
