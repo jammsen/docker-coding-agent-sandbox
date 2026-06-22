@@ -155,8 +155,8 @@ RUN npx -y playwright install chromium
 USER root
 WORKDIR /
 
-COPY --chmod=744 entrypoint.sh /
-COPY --chmod=755 agent-session.sh /agent-session.sh
-COPY --chmod=644 upload-server.js /upload-server.js
+COPY --chmod=744 scripts/entrypoint.sh /
+COPY --chmod=755 scripts/agent-session.sh /agent-session.sh
+COPY --chmod=644 scripts/upload-server.js /upload-server.js
 
 ENTRYPOINT ["./entrypoint.sh"]
