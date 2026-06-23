@@ -1,6 +1,5 @@
 modelRoles: 
   default: vllm/qwen3.6-35b
-  smol: vllm-vision/qwen3-vl-8b
   slow: vllm/qwen3.6-35b
 symbolPreset: unicode
 theme: 

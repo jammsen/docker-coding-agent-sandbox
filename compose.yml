@@ -13,8 +13,9 @@ services:
       - USER=agent
       - LANG=C.UTF-8          # ensures TUI apps (opencode, omp) render Unicode box-drawing chars
       - LC_ALL=C.UTF-8
-      - TOOLS=opencode,omp   # order defines menu order and default (first = default)
+      - TOOLS=opencode,omp,claude   # order defines menu order and default (first = default)
       - DEFAULT_TOOL=${DEFAULT_TOOL:-}  # pass-through from host shell; empty = show menu in browser
+      - CLAUDE_CODE_NO_FLICKER=1        # prevents Claude Code from using alt-screen tricks that break scroll in WeTTY
     init: true                           # tini as PID 1 — reaps zombie child processes
     restart: unless-stopped              # auto-restart on failure or host reboot
     read_only: false                   # opencode writes session state
@@ -43,9 +44,25 @@ services:
       - ./config/omp-settings.json:/home/agent/.omp/agent/settings.json:rw
       - ./config/omp-models.yml:/home/agent/.omp/agent/models.yml:ro
       - ./config/omp-AGENTS.md:/home/agent/.omp/agent/AGENTS.md:ro
+      # Claude Code config (read-only sources; entrypoint syncs them into ~/.claude/ on start)
+      - ./config/claude-settings.json:/home/agent/.config/claude-settings.json:ro
+      - ./config/claude-CLAUDE.md:/home/agent/.config/claude-CLAUDE.md:ro
+      - ./config/claude-agents:/home/agent/.config/claude-agents:ro
+      # Claude Code session state (transcripts, checkpoints, etc.)
+      - ./data/claude:/home/agent/.claude:rw
       # Your project workspace (read-write so tools can edit files)
       - ./workspace:/home/agent/workspace:rw
-      - ./data:/home/agent/.local/share/opencode
+      - ./data/opencode:/home/agent/.local/share/opencode
       - ./config/auth.json:/home/agent/.local/share/opencode/auth.json:ro
     # No network_mode: host — use bridge so container is isolated
     # but can still reach your vLLM server via host IP
+
+  litellm:
+    image: ghcr.io/berriai/litellm:v1.89.3   # latest stable as of 2026-06-22; post-attack (1.82.7/1.82.8 were the compromised PyPI versions)
+    container_name: agentic-litellm
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./config/litellm-config.yaml:/app/config.yaml:ro
+    command: ["--config", "/app/config.yaml", "--port", "4000", "--host", "0.0.0.0"]
+    restart: unless-stopped

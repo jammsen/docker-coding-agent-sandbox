@@ -54,6 +54,29 @@ fi
 if [[ "$NEEDS_CHOWN" = "true" ]]; then
     # -xdev: stay on the same filesystem, skip bind mounts (avoids EPERM on :ro mounts)
     find "$APP_HOME" -xdev -exec chown "$APP_USER":"$APP_GROUP" {} +
+    # Explicitly re-own bind-mounted data dirs that -xdev skips
+    chown -R "$APP_USER":"$APP_GROUP" "$APP_HOME/.claude" 2>/dev/null || true
+fi
+
+# Sync Claude Code config files into ~/.claude/ on every start so config changes take effect.
+# The source files are mounted read-only at /home/agent/.config/claude-* by compose.yml.
+# ~/.claude/ is a rw volume — Claude Code writes session state there alongside these files.
+CLAUDE_CFG_SRC_SETTINGS="$APP_HOME/.config/claude-settings.json"
+CLAUDE_CFG_SRC_CLAUDE_MD="$APP_HOME/.config/claude-CLAUDE.md"
+CLAUDE_CFG_SRC_AGENTS="$APP_HOME/.config/claude-agents"
+CLAUDE_DIR="$APP_HOME/.claude"
+
+if [[ -f "$CLAUDE_CFG_SRC_SETTINGS" ]]; then
+    mkdir -p "$CLAUDE_DIR/agents"
+    chown "$APP_USER":"$APP_GROUP" "$CLAUDE_DIR" "$CLAUDE_DIR/agents"
+    install -m644 -o "$APP_USER" -g "$APP_GROUP" "$CLAUDE_CFG_SRC_SETTINGS" "$CLAUDE_DIR/settings.json"
+    install -m644 -o "$APP_USER" -g "$APP_GROUP" "$CLAUDE_CFG_SRC_CLAUDE_MD" "$CLAUDE_DIR/CLAUDE.md"
+    if [[ -d "$CLAUDE_CFG_SRC_AGENTS" ]]; then
+        find "$CLAUDE_CFG_SRC_AGENTS" -name '*.md' | while IFS= read -r f; do
+            install -m644 -o "$APP_USER" -g "$APP_GROUP" "$f" "$CLAUDE_DIR/agents/$(basename "$f")"
+        done
+    fi
+    echo "> Claude Code config synced to $CLAUDE_DIR"
 fi
 
 OPENCODE_WORKSPACE="/home/agent/workspace"

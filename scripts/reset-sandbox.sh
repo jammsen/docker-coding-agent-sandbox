@@ -67,11 +67,23 @@ EOF
 
 clean_dir() {
   local dir="$1"
-  local keep="$dir/.gitkeep"
-
   mkdir -p "$dir"
-  find "$dir" -mindepth 1 ! -path "$keep" -exec rm -rf {} +
-  touch "$keep"
+
+  # Collect all .gitkeep paths before touching anything
+  mapfile -t keeps < <(find "$dir" -name '.gitkeep' 2>/dev/null)
+
+  # Delete only top-level entries (rm -rf handles subtrees); avoids find
+  # trying to descend into dirs it already removed via a prior rm -rf.
+  find "$dir" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+
+  # Recreate every .gitkeep and its parent directory
+  for f in "${keeps[@]}"; do
+    mkdir -p "$(dirname "$f")"
+    touch "$f"
+  done
+
+  # Guarantee at least the root .gitkeep exists even if none were found
+  touch "$dir/.gitkeep"
 }
 
 confirm_reset

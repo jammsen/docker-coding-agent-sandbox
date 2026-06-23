@@ -1,7 +1,14 @@
-data/
-!data/.gitkeep
+data/*
+!data/opencode/
+!data/claude/
+data/opencode/*
+!data/opencode/.gitkeep
+data/claude/*
+!data/claude/.gitkeep
 
-workspace
-!workspace/.gitkeep
+workspace/*
+!workspace/uploads/
+workspace/uploads/*
+!workspace/uploads/.gitkeep
 
 .DS_Store

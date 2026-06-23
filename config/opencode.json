@@ -19,26 +19,9 @@
           }
         }
       }
-    },
-    "vllm-vision": {
-      "npm": "@ai-sdk/openai-compatible",
-      "name": "vLLM Vision",
-      "options": {
-        "baseURL": "http://10.0.0.13:8001/v1"
-      },
-      "models": {
-        "qwen3-vl-8b": {
-          "name": "Qwen3-VL 8B FP8",
-          "limit": {
-            "context": 7000,
-            "output": 3000
-          }
-        }
-      }
     }
   },
   "model": "vllm/qwen3.6-35b",
-  "small_model": "vllm-vision/qwen3-vl-8b",
   "autoshare": false,
   "agent": {
     "build": {

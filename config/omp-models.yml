@@ -13,14 +13,4 @@ providers:
         # OMP will refuse to send a request that would exceed contextWindow,
         # so keeping maxTokens conservative leaves headroom for the prompt.
         systemPromptSize: 4096
-  vllm-vision:
-    baseUrl: "http://10.0.0.13:8001/v1"
-    apiKey: "dummy"
-    api: openai-completions
-    auth: apiKey
-    models:
-      - id: qwen3-vl-8b
-        name: "Qwen3-VL 8B FP8"
-        contextWindow: 7000
-        maxTokens: 3000
-        systemPromptSize: 2048
+

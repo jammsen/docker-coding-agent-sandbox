@@ -152,6 +152,9 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
 # --no-sandbox is required at runtime due to cap_drop: ALL — see AGENTS.md
 RUN npx -y playwright install chromium
 
+# claude — installs to ~/.local/bin/claude which is already on PATH via ENV above
+RUN curl -fsSL https://claude.ai/install.sh | bash
+
 USER root
 WORKDIR /
 

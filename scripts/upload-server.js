@@ -273,6 +273,27 @@ const HTML = `<!DOCTYPE html>
     }
     #btnCopy:hover { background: #3d4263; }
     #btnCopy.ok    { color: #86efac; }
+
+    .result-row { margin-top: 10px; }
+    .result-row:first-child { margin-top: 0; }
+
+    .result-label {
+      font-size: 0.78rem;
+      color: #64748b;
+      margin-bottom: 5px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    #btnCopyPrompt {
+      background: #2d3148;
+      color: #94a3b8;
+      padding: 6px 12px;
+      font-size: 0.78rem;
+      flex-shrink: 0;
+    }
+    #btnCopyPrompt:hover { background: #3d4263; }
+    #btnCopyPrompt.ok    { color: #86efac; }
   </style>
 </head>
 <body>
@@ -305,10 +326,19 @@ const HTML = `<!DOCTYPE html>
   <div id="errorMsg"></div>
 
   <div id="result">
-    <p>Please post this path to your agent:</p>
-    <div class="path-box">
-      <span id="resultPath"></span>
-      <button id="btnCopy">Copy</button>
+    <div class="result-row">
+      <div class="result-label">Path</div>
+      <div class="path-box">
+        <span id="resultPath"></span>
+        <button id="btnCopy">Copy</button>
+      </div>
+    </div>
+    <div class="result-row">
+      <div class="result-label">Prompt</div>
+      <div class="path-box">
+        <span id="resultPrompt"></span>
+        <button id="btnCopyPrompt">Copy</button>
+      </div>
     </div>
   </div>
 </div>
@@ -327,9 +357,11 @@ const HTML = `<!DOCTYPE html>
   const btnClear    = document.getElementById('btnClear');
   const uploading   = document.getElementById('uploading');
   const errorMsg    = document.getElementById('errorMsg');
-  const result      = document.getElementById('result');
-  const resultPath  = document.getElementById('resultPath');
-  const btnCopy     = document.getElementById('btnCopy');
+  const result        = document.getElementById('result');
+  const resultPath    = document.getElementById('resultPath');
+  const resultPrompt  = document.getElementById('resultPrompt');
+  const btnCopy       = document.getElementById('btnCopy');
+  const btnCopyPrompt = document.getElementById('btnCopyPrompt');
 
   function fmtBytes(n) {
     if (n < 1024) return n + ' B';
@@ -393,6 +425,7 @@ const HTML = `<!DOCTYPE html>
         btnUpload.disabled = false;
       } else {
         resultPath.textContent = data.path;
+        resultPrompt.textContent = 'Analyze the image at ' + data.path + ' and describe what you see.';
         result.style.display = 'block';
       }
     } catch (err) {
@@ -436,18 +469,16 @@ const HTML = `<!DOCTYPE html>
   btnUpload.addEventListener('click', doUpload);
   btnClear.addEventListener('click', clear);
 
-  // Copy path to clipboard
-  btnCopy.addEventListener('click', () => {
-    const text = resultPath.textContent;
+  // Copy helpers
+  function copyText(text, btn) {
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(() => flash()).catch(() => fallbackCopy(text));
+      navigator.clipboard.writeText(text).then(() => flash(btn)).catch(() => fallbackCopy(text, btn));
     } else {
-      fallbackCopy(text);
+      fallbackCopy(text, btn);
     }
-  });
+  }
 
-  function fallbackCopy(text) {
-    // Works on HTTP (no secure context needed)
+  function fallbackCopy(text, btn) {
     const ta = document.createElement('textarea');
     ta.value = text;
     ta.style.position = 'fixed';
@@ -457,13 +488,16 @@ const HTML = `<!DOCTYPE html>
     ta.select();
     document.execCommand('copy');
     document.body.removeChild(ta);
-    flash();
+    flash(btn);
   }
 
-  function flash() {
-    btnCopy.textContent = 'Copied!';
-    btnCopy.classList.add('ok');
-    setTimeout(() => { btnCopy.textContent = 'Copy'; btnCopy.classList.remove('ok'); }, 2000);
+  btnCopy.addEventListener('click', () => copyText(resultPath.textContent, btnCopy));
+  btnCopyPrompt.addEventListener('click', () => copyText(resultPrompt.textContent, btnCopyPrompt));
+
+  function flash(btn) {
+    btn.textContent = 'Copied!';
+    btn.classList.add('ok');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('ok'); }, 2000);
   }
 </script>
 </body>
