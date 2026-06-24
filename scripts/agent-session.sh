@@ -37,10 +37,10 @@ if [[ -z "${STY:-}" ]]; then
         fi
     done < <(screen -ls 2>/dev/null || true)
 
-    if [[ ${#SESSION_IDS[@]} -eq 0 ]]; then
-        # No existing sessions — start fresh with a timestamped name.
-        exec screen -S "sandbox-started-$(date +%Y-%m-%d-%H:%M:%S)" "$0"
-    fi
+    # if [[ ${#SESSION_IDS[@]} -eq 0 ]]; then
+    #     # No existing sessions — start fresh with a timestamped name.
+    #     exec screen -S "sandbox-started-$(date +%Y-%m-%d-%H:%M:%S)" "$0"
+    # fi
 
     # Sessions exist — present picker.
     # Use screen -x (multiattach) so multiple browser tabs can share a session.

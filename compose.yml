@@ -58,11 +58,28 @@ services:
     # but can still reach your vLLM server via host IP
 
   litellm:
-    image: ghcr.io/berriai/litellm:v1.89.3   # latest stable as of 2026-06-22; post-attack (1.82.7/1.82.8 were the compromised PyPI versions)
+    image: ghcr.io/berriai/litellm:v1.89.3        # latest stable as of 2026-06-22; post-attack (1.82.7/1.82.8 were the compromised PyPI versions)
     container_name: agentic-litellm
+    environment:
+      - LITELLM_LOG=DEBUG                         # full request/response logging
+      - LITELLM_FORCE_CHAT_COMPLETION=true        # force /v1/chat/completions
+      - LITELLM_USE_RESPONSES_API=false           # Disable responses API path entirely
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
       - ./config/litellm-config.yaml:/app/config.yaml:ro
     command: ["--config", "/app/config.yaml", "--port", "4000", "--host", "0.0.0.0"]
     restart: unless-stopped
+
+  # claude-proxy:
+  #   image: ghcr.io/1rgs/claude-code-proxy:main
+  #   container_name: claude-code-proxy
+  #   environment:
+  #     - OPENAI_API_KEY=dummy
+  #     - OPENAI_BASE_URL=http://10.0.0.13:8000/v1
+  #     - BIG_MODEL=qwen3.6-35b
+  #     - SMALL_MODEL=qwen3.6-35b
+  #   ports:
+  #     - 8082:8082
+  #   restart: unless-stopped
+

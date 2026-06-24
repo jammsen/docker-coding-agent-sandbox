@@ -1,4 +1,5 @@
 data/*
+test-data/*
 !data/opencode/
 !data/claude/
 data/opencode/*

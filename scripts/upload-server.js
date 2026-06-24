@@ -77,8 +77,10 @@ const HTML = `<!DOCTYPE html>
       color: #e2e8f0;
       min-height: 100vh;
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
+      gap: 24px;
       padding: 24px;
     }
 
@@ -294,6 +296,139 @@ const HTML = `<!DOCTYPE html>
     }
     #btnCopyPrompt:hover { background: #3d4263; }
     #btnCopyPrompt.ok    { color: #86efac; }
+
+    /* Gallery card */
+    .gallery-card {
+      background: rgba(99, 102, 241, 0.05);
+      border-color: rgba(99, 102, 241, 0.25);
+    }
+    .gallery-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .gallery-header h2 { font-size: 1rem; font-weight: 600; color: #818cf8; }
+    #btnRefresh {
+      background: transparent;
+      border: 1px solid #2d3148;
+      color: #64748b;
+      padding: 5px 12px;
+      font-size: 0.82rem;
+      border-radius: 6px;
+    }
+    #btnRefresh:hover { background: #2d3148; color: #94a3b8; }
+    .gallery-empty {
+      text-align: center;
+      padding: 24px 0;
+      font-size: 0.85rem;
+      color: #475569;
+    }
+    .gallery-grid {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+    }
+    .thumb {
+      width: 96px;
+      aspect-ratio: 1;
+      border-radius: 6px;
+      overflow: hidden;
+      cursor: pointer;
+      border: 2px solid transparent;
+      background: #0f1117;
+      transition: border-color 0.15s, transform 0.1s;
+    }
+    .thumb:hover { border-color: #6366f1; transform: scale(1.04); }
+    .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+    /* Modal */
+    .modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .modal.open { display: flex; }
+    .modal-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.78);
+      backdrop-filter: blur(4px);
+      cursor: pointer;
+    }
+    .modal-box {
+      position: relative;
+      background: #1a1d2e;
+      border: 1px solid #2d3148;
+      border-radius: 12px;
+      padding: 28px 24px 24px;
+      width: 100%;
+      max-width: 700px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+      z-index: 1;
+    }
+    #btnModalClose {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background: #2d3148;
+      color: #94a3b8;
+      border: none;
+      border-radius: 6px;
+      width: 30px;
+      height: 30px;
+      font-size: 1rem;
+      cursor: pointer;
+      padding: 0;
+      line-height: 30px;
+      text-align: center;
+    }
+    #btnModalClose:hover { background: #3d4263; }
+    #modalImg {
+      display: block;
+      max-width: 100%;
+      max-height: 55vh;
+      margin: 0 auto 8px;
+      border-radius: 6px;
+      object-fit: contain;
+      background: #0f1117;
+    }
+    .modal-name {
+      font-size: 0.75rem;
+      color: #475569;
+      text-align: center;
+      margin-bottom: 16px;
+      font-family: 'Consolas', 'Fira Mono', monospace;
+      word-break: break-all;
+    }
+    #btnModalCopyPath { background: #2d3148; color: #94a3b8; padding: 6px 12px; font-size: 0.78rem; flex-shrink: 0; }
+    #btnModalCopyPath:hover { background: #3d4263; }
+    #btnModalCopyPath.ok { color: #86efac; }
+    #btnModalCopyPrompt { background: #2d3148; color: #94a3b8; padding: 6px 12px; font-size: 0.78rem; flex-shrink: 0; }
+    #btnModalCopyPrompt:hover { background: #3d4263; }
+    #btnModalCopyPrompt.ok { color: #86efac; }
+    .modal-delete-row {
+      margin-top: 18px;
+      display: flex;
+      justify-content: center;
+    }
+    #btnModalDelete {
+      background: rgba(239,68,68,0.12);
+      color: #fca5a5;
+      border: 1px solid rgba(239,68,68,0.35);
+      padding: 8px 28px;
+      font-size: 0.88rem;
+      border-radius: 6px;
+    }
+    #btnModalDelete:hover { background: rgba(239,68,68,0.22); border-color: rgba(239,68,68,0.6); color: #fecaca; }
+    #btnModalDelete.confirming { background: rgba(239,68,68,0.80); color: #fff; border-color: transparent; }
   </style>
 </head>
 <body>
@@ -339,6 +474,41 @@ const HTML = `<!DOCTYPE html>
         <span id="resultPrompt"></span>
         <button id="btnCopyPrompt">Copy</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<div class="card gallery-card">
+  <div class="gallery-header">
+    <h2>Recent Uploads</h2>
+    <button id="btnRefresh">↻ Refresh</button>
+  </div>
+  <div id="galleryEmpty" class="gallery-empty">No images uploaded yet.</div>
+  <div id="galleryGrid" class="gallery-grid" style="display:none"></div>
+</div>
+
+<div class="modal" id="modal">
+  <div class="modal-backdrop" id="modalBackdrop"></div>
+  <div class="modal-box">
+    <button id="btnModalClose">✕</button>
+    <img id="modalImg" src="" alt="">
+    <div class="modal-name" id="modalName"></div>
+    <div class="result-row">
+      <div class="result-label">Path</div>
+      <div class="path-box">
+        <span id="modalPath" style="font-family:'Consolas','Fira Mono',monospace;font-size:0.84rem;color:#a5f3fc;flex:1;word-break:break-all;"></span>
+        <button id="btnModalCopyPath">Copy</button>
+      </div>
+    </div>
+    <div class="result-row">
+      <div class="result-label">Prompt</div>
+      <div class="path-box">
+        <span id="modalPrompt" style="font-size:0.84rem;flex:1;word-break:break-all;"></span>
+        <button id="btnModalCopyPrompt">Copy</button>
+      </div>
+    </div>
+    <div class="modal-delete-row">
+      <button id="btnModalDelete">🗑 Delete image</button>
     </div>
   </div>
 </div>
@@ -427,6 +597,7 @@ const HTML = `<!DOCTYPE html>
         resultPath.textContent = data.path;
         resultPrompt.textContent = 'Analyze the image at ' + data.path + ' and describe what you see.';
         result.style.display = 'block';
+        loadGallery();
       }
     } catch (err) {
       showError('Network error: ' + err.message);
@@ -499,6 +670,118 @@ const HTML = `<!DOCTYPE html>
     btn.classList.add('ok');
     setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('ok'); }, 2000);
   }
+
+  // --- Gallery ---
+  var galleryGrid  = document.getElementById('galleryGrid');
+  var galleryEmpty = document.getElementById('galleryEmpty');
+
+  async function loadGallery() {
+    try {
+      var res = await fetch('/images');
+      var data = await res.json();
+      renderGallery(data.images || []);
+    } catch { /* ignore */ }
+  }
+
+  function renderGallery(images) {
+    galleryGrid.innerHTML = '';
+    if (!images.length) {
+      galleryEmpty.style.display = 'block';
+      galleryGrid.style.display = 'none';
+      return;
+    }
+    galleryEmpty.style.display = 'none';
+    galleryGrid.style.display = 'flex';
+    images.forEach(function(item) {
+      var div = document.createElement('div');
+      div.className = 'thumb';
+      var img = document.createElement('img');
+      img.src = '/image/' + encodeURIComponent(item.filename);
+      img.alt = item.filename;
+      img.loading = 'lazy';
+      div.appendChild(img);
+      div.addEventListener('click', (function(p, f, s) {
+        return function() { openModal(p, f, s); };
+      })(item.path, item.filename, item.size));
+      galleryGrid.appendChild(div);
+    });
+  }
+
+  document.getElementById('btnRefresh').addEventListener('click', loadGallery);
+
+  // --- Modal ---
+  var modalEl            = document.getElementById('modal');
+  var modalImgEl         = document.getElementById('modalImg');
+  var modalNameEl        = document.getElementById('modalName');
+  var modalPathEl        = document.getElementById('modalPath');
+  var modalPromptEl      = document.getElementById('modalPrompt');
+  var btnModalCopyPath   = document.getElementById('btnModalCopyPath');
+  var btnModalCopyPrompt = document.getElementById('btnModalCopyPrompt');
+  var btnModalDelete     = document.getElementById('btnModalDelete');
+  var _modalCurrentFile  = null; // filename currently shown in modal
+
+  function fmtSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1048576).toFixed(1) + ' MB';
+  }
+
+  function openModal(imgPath, filename, size) {
+    modalImgEl.src = '/image/' + encodeURIComponent(filename);
+    modalNameEl.textContent = filename;
+    // Dimensions filled in once image is loaded
+    modalImgEl.onload = function() {
+      var dims = modalImgEl.naturalWidth + ' × ' + modalImgEl.naturalHeight + ' px';
+      var sizeStr = size != null ? '  ·  ' + fmtSize(size) : '';
+      modalNameEl.textContent = filename + '  ·  ' + dims + sizeStr;
+    };
+    modalPathEl.textContent = imgPath;
+    modalPromptEl.textContent = 'Analyze the image at ' + imgPath + ' and describe what you see.';
+    _modalCurrentFile = filename;
+    btnModalDelete.textContent = '\uD83D\uDDD1 Delete image';
+    btnModalDelete.classList.remove('confirming');
+    modalEl.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeModal() {
+    modalEl.classList.remove('open');
+    document.body.style.overflow = '';
+    setTimeout(function() { modalImgEl.src = ''; }, 200);
+  }
+
+  document.getElementById('btnModalClose').addEventListener('click', closeModal);
+  document.getElementById('modalBackdrop').addEventListener('click', closeModal);
+  document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeModal(); });
+
+  btnModalCopyPath.addEventListener('click', function() { copyText(modalPathEl.textContent, btnModalCopyPath); });
+  btnModalCopyPrompt.addEventListener('click', function() { copyText(modalPromptEl.textContent, btnModalCopyPrompt); });
+
+  // Delete — two-step: first click asks to confirm, second click deletes
+  btnModalDelete.addEventListener('click', function() {
+    if (!btnModalDelete.classList.contains('confirming')) {
+      btnModalDelete.textContent = 'Confirm delete?';
+      btnModalDelete.classList.add('confirming');
+      // Auto-reset after 3 s if no second click
+      setTimeout(function() {
+        btnModalDelete.textContent = '\uD83D\uDDD1 Delete image';
+        btnModalDelete.classList.remove('confirming');
+      }, 3000);
+      return;
+    }
+    var filename = _modalCurrentFile;
+    if (!filename) return;
+    fetch('/image/' + encodeURIComponent(filename), { method: 'DELETE' })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.error) { alert('Delete failed: ' + data.error); return; }
+        closeModal();
+        loadGallery();
+      })
+      .catch(function() { alert('Delete request failed.'); });
+  });
+
+  loadGallery();
 </script>
 </body>
 </html>`;
@@ -519,6 +802,66 @@ function handleRequest(req, res) {
       'Referrer-Policy': 'no-referrer',
     });
     return res.end(body);
+  }
+
+  // List uploaded images — newest first
+  if (req.method === 'GET' && req.url === '/images') {
+    const exts = new Set(['png', 'jpg', 'gif', 'webp']);
+    try {
+      const images = fs.readdirSync(UPLOAD_DIR)
+        .filter(f => exts.has(path.extname(f).slice(1).toLowerCase()))
+        .map(f => ({ filename: f, path: path.join(UPLOAD_DIR, f), mtime: fs.statSync(path.join(UPLOAD_DIR, f)).mtimeMs, size: fs.statSync(path.join(UPLOAD_DIR, f)).size }))
+        .sort((a, b) => b.mtime - a.mtime)
+        .map(({ filename, path: fp, size }) => ({ filename, path: fp, size }));
+      return json(res, 200, { images });
+    } catch (err) {
+      return json(res, 500, { error: 'Could not list images' });
+    }
+  }
+
+  // Serve an uploaded image by filename (thumbnails + modal)
+  const imgServeMatch = req.url.match(/^\/image\/([^?#]+)$/);
+  if (req.method === 'GET' && imgServeMatch) {
+    const rawName = decodeURIComponent(imgServeMatch[1]);
+    // Strict allow-list: no path separators or traversal — spaces and parens are fine
+    if (!/^[\w ()-]+\.(png|jpg|gif|webp)$/i.test(rawName)) {
+      res.writeHead(400); return res.end();
+    }
+    const filePath = path.join(UPLOAD_DIR, rawName);
+    const mimeMap = { png: 'image/png', jpg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp' };
+    const mime = mimeMap[path.extname(rawName).slice(1).toLowerCase()];
+    try {
+      const data = fs.readFileSync(filePath);
+      res.writeHead(200, {
+        'Content-Type': mime,
+        'Content-Length': data.length,
+        'Cache-Control': 'max-age=3600, immutable',
+        'X-Content-Type-Options': 'nosniff',
+      });
+      return res.end(data);
+    } catch {
+      res.writeHead(404); return res.end();
+    }
+  }
+
+  // Delete an uploaded image
+  if (req.method === 'DELETE' && imgServeMatch) {
+    const rawName = decodeURIComponent(imgServeMatch[1]);
+    if (!/^[\w ()-]+\.(png|jpg|gif|webp)$/i.test(rawName)) {
+      res.writeHead(400); return res.end();
+    }
+    const filePath = path.join(UPLOAD_DIR, rawName);
+    // Defense-in-depth: confirm resolved path is inside UPLOAD_DIR
+    if (!path.resolve(filePath).startsWith(path.resolve(UPLOAD_DIR) + path.sep)) {
+      res.writeHead(403); return res.end();
+    }
+    try {
+      fs.unlinkSync(filePath);
+      console.log('[upload-server] deleted:', filePath);
+      return json(res, 200, { ok: true });
+    } catch (err) {
+      return json(res, 404, { error: 'File not found or already deleted' });
+    }
   }
 
   // Accept an uploaded image

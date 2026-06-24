@@ -22,6 +22,6 @@ Use nohup with a PID file — do not use bare & without nohup.
 Playwright with Chromium is pre-installed. Due to cap_drop:ALL, always launch with:
   --no-sandbox --disable-setuid-sandbox
 
-## Vision Tasks
-
-For image analysis or screenshot interpretation, delegate to the vision-analyzer subagent by passing the file path from /home/agent/workspace/uploads/.
+## MANDATORY: Image Analysis
+NEVER use the Read tool on image files (png, jpg, jpeg, gif, webp).
+ALWAYS delegate to the vision-analyzer agent instead.
