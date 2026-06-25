@@ -76,6 +76,9 @@ docker-agentic-harness-sandbox/
 │   ├── claude-shim.js      ← Claude→LiteLLM image-rewrite proxy (127.0.0.1:4001, pure Node.js stdlib)
 │   ├── upload-server.js    ← image upload companion server (port 1112, pure Node.js stdlib)
 │   └── reset-sandbox.sh    ← wipe generated state from ./workspace and ./data
+├── patches/                ← one-off scripts applied to WeTTY at image build time, not present at runtime
+│   ├── wetty-csp.js        ← allows the upload-server iframe to load inside WeTTY without being browser-blocked
+│   └── wetty-html.js       ← injects the upload overlay panel (toggle button + slide-in drawer) into WeTTY's page
 ├── config/
 │   ├── opencode.json       ← opencode provider and agent config (mounted read-only)
 │   ├── AGENTS.md           ← global sandbox rules for opencode (mounted read-only)
