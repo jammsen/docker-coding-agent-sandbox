@@ -132,6 +132,12 @@ export AVAILABLE_TOOLS_ENV="${AVAILABLE_TOOLS[*]}"
 gosu agent node /upload-server.js &
 echo "> Upload server started on port 1112 — https://<your-server-ip>:1112"
 
+# Start the Claude→LiteLLM rewrite proxy (runs as agent, listens on 127.0.0.1:4001).
+# It lifts images out of Claude Code's tool_result blocks so LiteLLM forwards them to vLLM
+# instead of dropping them. Claude Code reaches it via ANTHROPIC_BASE_URL=http://127.0.0.1:4001.
+gosu agent node /claude-shim.js &
+echo "> Claude image-rewrite proxy started on 127.0.0.1:4001 → ${LITELLM_UPSTREAM:-http://agentic-litellm:4000}"
+
 echo "> Starting WeTTY browser terminal on port 1111..."
 echo "> Connect at: https://<your-server-ip>:1111  (accept the self-signed cert warning once)"
 # wetty must run as root so it detects localhost and uses local/command mode instead of SSH.

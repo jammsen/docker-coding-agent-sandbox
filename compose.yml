@@ -16,6 +16,7 @@ services:
       - TOOLS=opencode,omp,claude   # order defines menu order and default (first = default)
       - DEFAULT_TOOL=${DEFAULT_TOOL:-}  # pass-through from host shell; empty = show menu in browser
       - CLAUDE_CODE_NO_FLICKER=1        # prevents Claude Code from using alt-screen tricks that break scroll in WeTTY
+      - LITELLM_UPSTREAM=http://agentic-litellm:4000   # upstream for claude-shim.js (Claude image-rewrite proxy on 127.0.0.1:4001)
     init: true                           # tini as PID 1 — reaps zombie child processes
     restart: unless-stopped              # auto-restart on failure or host reboot
     read_only: false                   # opencode writes session state
@@ -66,6 +67,8 @@ services:
       - LITELLM_USE_RESPONSES_API=false           # Disable responses API path entirely
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    ports:
+      - "4000:4000/tcp"   # litellm proxy — exposed for debugging the Anthropic→vLLM translation
     volumes:
       - ./config/litellm-config.yaml:/app/config.yaml:ro
     command: ["--config", "/app/config.yaml", "--port", "4000", "--host", "0.0.0.0"]

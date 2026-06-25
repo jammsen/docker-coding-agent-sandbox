@@ -22,6 +22,10 @@ Use nohup with a PID file — do not use bare & without nohup.
 Playwright with Chromium is pre-installed. Due to cap_drop:ALL, always launch with:
   --no-sandbox --disable-setuid-sandbox
 
-## MANDATORY: Image Analysis
-NEVER use the Read tool on image files (png, jpg, jpeg, gif, webp).
-ALWAYS delegate to the vision-analyzer agent instead.
+## Image Analysis
+The model behind this sandbox is vision-capable. To analyse an image, use the **Read tool**
+directly on the image file path (png, jpg, jpeg, gif, webp), e.g.:
+  Read /home/agent/workspace/uploads/filename.png
+Claude Code natively encodes the file and sends it to the model as a real image block — this is
+the only mechanism that delivers actual pixels to the model. Do NOT base64-encode the file by hand
+and paste the string into a prompt; raw base64 text is not an image and the model cannot see it.

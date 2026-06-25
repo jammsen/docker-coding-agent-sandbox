@@ -24,6 +24,8 @@ A companion **image upload page** runs on `https://<host>:1112`. Paste a screens
     - [Tool selection](#tool-selection)
     - [Session management](#session-management)
     - [Uploading screenshots and images](#uploading-screenshots-and-images)
+    - [Image analysis with Claude Code](#image-analysis-with-claude-code)
+    - [Running one-shot tasks (headless)](#running-one-shot-tasks-headless)
     - [Modes (OpenCode)](#modes-opencode)
     - [Context window awareness](#context-window-awareness)
   - [Troubleshooting](#troubleshooting)
@@ -227,6 +229,55 @@ Files are saved to `./workspace/uploads/` on your host (same mount as the worksp
 
 ---
 
+### Image analysis with Claude Code
+
+WeTTY is a browser terminal, so you **cannot paste a screenshot into the Claude Code console**. Instead:
+
+1. Upload the image via the companion page (`https://<host>:1112`) — see [Uploading screenshots and images](#uploading-screenshots-and-images).
+2. In the terminal, type the path and ask for analysis, e.g.:
+   ```
+   Analyse the image at /home/agent/workspace/uploads/2026-06-21-14-30-00.png and describe what you see.
+   ```
+3. Claude Code uses its **Read tool** on that path. Read natively encodes the file and sends it to the model as a real image block — this is the only mechanism that delivers actual pixels. Do **not** ask the model to `base64`-encode the file by hand; raw base64 text is not an image and the model cannot see it.
+
+**How the image actually reaches your model.** Claude Code speaks the Anthropic Messages API, while your vLLM server speaks the OpenAI chat/completions API, so two hops translate between them:
+
+```
+Claude Code ──Anthropic /v1/messages──▶ claude-shim (127.0.0.1:4001)
+            ──▶ LiteLLM (agentic-litellm:4000) ──▶ vLLM (/v1/chat/completions)
+```
+
+- **`claude-shim`** (`scripts/claude-shim.js`, started by the entrypoint) is a tiny pure-stdlib proxy. Claude Code's Read tool returns images inside Anthropic `tool_result` blocks, and LiteLLM drops images nested there when translating to chat/completions (OpenAI tool-role messages cannot carry images). The shim lifts each image out of the `tool_result` into a normal user message before forwarding — the placement vLLM accepts — and streams everything else through untouched.
+- **LiteLLM** (the `litellm` service in `compose.yml`) maps the Anthropic model aliases (`claude-sonnet-4-5`, `claude-haiku-4-5`) onto your vLLM model and translates Anthropic↔OpenAI. The backend model is configured as `hosted_vllm/<model>` in `config/litellm-config.yaml` so LiteLLM uses chat/completions (the `openai/` prefix instead routes image requests through the OpenAI Responses API, which vLLM rejects).
+
+Your model must be **vision-capable** for any of this to return a real description. If images come back as generic hallucinations, confirm the model serves vision over chat/completions:
+
+```bash
+curl http://YOUR_VLLM_IP:8000/v1/chat/completions -H "Content-Type: application/json" -d '{
+  "model": "YOUR_MODEL_ID",
+  "messages": [{"role":"user","content":[
+    {"type":"image_url","image_url":{"url":"https://a-z-animals.com/media/tiger_laying_hero_background.jpg"}},
+    {"type":"text","text":"What animal is in this image?"}]}]}'
+```
+
+### Running one-shot tasks (headless)
+
+Besides the interactive browser terminal, you can run a **single Claude Code task non-interactively** and capture its final answer on stdout — useful for scripting, cron jobs, or quick questions:
+
+```bash
+docker exec agentic-harness-sandbox agent-task "Summarise WORKLOG.md in 3 bullet points"
+
+# pipe data in on stdin
+echo "$LOGS" | docker exec -i agentic-harness-sandbox agent-task "What error repeats most in this log?"
+
+# override the default autonomy (e.g. read-only planning)
+docker exec agentic-harness-sandbox agent-task "Outline a refactor of foo.py" --permission-mode plan
+```
+
+`agent-task` (`scripts/agent-task.sh`, installed at `/usr/local/bin/agent-task`) wraps `claude -p` and runs the workspace as its project root. It **always drops root → `agent` via gosu** before launching Claude — see [Security Notes](#security-notes) — so a task can never run with more privilege than an interactive session, regardless of how it is invoked. By default it runs autonomously (`--permission-mode bypassPermissions`) because the container itself is the security boundary; pass your own `--permission-mode` to change that.
+
+---
+
 ### Context window awareness
 
 For OpenCode, the status bar shows `X tokens (Y% used)`. Build mode consumes ~10,000 tokens just for the system prompt before you type anything. For large codebases, open only the files you need or use Ask mode.
@@ -291,6 +342,7 @@ The container starts as root to handle setup (creating the user, fixing file own
 - **`PUID` / `PGID`** — the in-container user is created at runtime with the same UID/GID as your host user. This ensures bind-mounted files in `./workspace` and `./data` have correct ownership on both sides of the mount.
 - Bridge networking only — isolated from the host network
 - Writable filesystem access is limited to `./workspace` and `./data` on the host. Config, commands, skills, and auth are mounted read-only.
+- **`agent-task` preserves the privilege drop** — a plain `docker exec agentic-harness-sandbox claude ...` would run Claude as **root**, since the container's entrypoint runs as root and `exec` inherits that user. The `agent-task` wrapper instead re-execs itself under `gosu agent` before launching Claude — the same drop path browser sessions use — so one-shot tasks can never run with more privilege than an interactive session. With `no-new-privileges` + `cap_drop: ALL` in force, there is no path back to root afterwards.
 
 The model runs entirely on your local vLLM server. No data leaves your network.
 
@@ -302,6 +354,10 @@ All runtimes and tools are installed at **build time** under the `agent` user �
 | --- | --- | --- |
 | `opencode` | `opencode.ai/install` | Agentic coding tool with TUI — [opencode.ai](https://opencode.ai) |
 | `omp` | `omp.sh/install` | Agentic coding tool (CLI) — [omp.sh](https://omp.sh) |
+| `claude` | `claude.ai/install.sh` | Claude Code CLI — talks to your vLLM model through LiteLLM — [claude.com/claude-code](https://claude.com/claude-code) |
+| LiteLLM proxy | `litellm` service (compose) | Maps Anthropic model aliases onto your vLLM model and translates Anthropic↔OpenAI — [litellm.ai](https://litellm.ai) |
+| `claude-shim.js` | bundled (Node.js stdlib) | Lifts images out of Claude Code `tool_result` blocks so LiteLLM forwards them to vLLM (127.0.0.1:4001) |
+| `agent-task` | bundled | Run a one-shot headless Claude Code task as the `agent` user (`docker exec … agent-task "…"`) |
 | `wetty` | npm global | Browser-based terminal over HTTPS (port 1111) — [npmjs.com/package/wetty](https://www.npmjs.com/package/wetty) |
 | `upload-server.js` | bundled (Node.js stdlib) | Image upload companion page (port 1112) — drag-drop, Ctrl+V paste, file picker |
 | `screen` | apt | Session persistence — agent keeps running when browser tab closes — [gnu.org/software/screen](https://www.gnu.org/software/screen/) |

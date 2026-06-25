@@ -12,7 +12,7 @@ model_list:
   #     mode: chat                    # explicitly declare this as a chat model
   - model_name: claude-sonnet-4-5
     litellm_params:
-      model: openai/qwen3.6-35b
+      model: hosted_vllm/qwen3.6-35b
       api_base: http://10.0.0.13:8000/v1
       api_key: dummy
     model_info:
@@ -20,7 +20,7 @@ model_list:
 
   - model_name: claude-haiku-4-5
     litellm_params:
-      model: openai/qwen3.6-35b
+      model: hosted_vllm/qwen3.6-35b
       api_base: http://10.0.0.13:8000/v1
       api_key: dummy
     model_info:

@@ -161,5 +161,7 @@ WORKDIR /
 COPY --chmod=744 scripts/entrypoint.sh /
 COPY --chmod=755 scripts/agent-session.sh /agent-session.sh
 COPY --chmod=644 scripts/upload-server.js /upload-server.js
+COPY --chmod=644 scripts/claude-shim.js /claude-shim.js
+COPY --chmod=755 scripts/agent-task.sh /usr/local/bin/agent-task
 
 ENTRYPOINT ["./entrypoint.sh"]
