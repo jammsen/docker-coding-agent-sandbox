@@ -77,6 +77,16 @@ ss -tlnp | grep 1111 || echo "Port 1111 is free"
 
 Never use `&` alone without `nohup` for servers — background processes started without `nohup` may not survive shell resets.
 
+## Image Analysis
+
+When asked to analyze or describe an image at a file path, run the `analyze-image` command and report its output:
+
+```bash
+analyze-image /path/to/image.png "your question or focus here"
+```
+
+Pass the user's intent as the second argument. If no specific focus is given, omit it and the default description prompt is used. Do not attempt to read the raw binary file, install packages, or write Python scripts to inspect the image. The `analyze-image` command handles vision analysis directly and returns a text description.
+
 ## Skills
 
 Use the `write-worklog` skill only when a detailed `WORKLOG.md` entry is needed or the user asks for worklog formatting. For command-driven workflows, prefer the worklog format embedded in the command itself.

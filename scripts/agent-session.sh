@@ -37,58 +37,44 @@ if [[ -z "${STY:-}" ]]; then
         fi
     done < <(screen -ls 2>/dev/null || true)
 
-    # if [[ ${#SESSION_IDS[@]} -eq 0 ]]; then
-    #     # No existing sessions — start fresh with a timestamped name.
-    #     exec screen -S "sandbox-started-$(date +%Y-%m-%d-%H:%M:%S)" "$0"
-    # fi
+    # Present picker with re-prompt on invalid input.
+    # Always shown — even with no sessions — so the terminal has time to size
+    # correctly before screen starts. Use screen -x (multiattach) so multiple
+    # browser tabs can share a session.
+    _MAX=$((${#SESSION_IDS[@]} + 1))
+    while true; do
+        echo ""
+        echo "Existing sessions:"
+        for i in "${!SESSION_LABELS[@]}"; do
+            if [[ $i -eq 0 ]]; then
+                echo "  $((i+1)). ${SESSION_LABELS[$i]}  (default)"
+            else
+                echo "  $((i+1)). ${SESSION_LABELS[$i]}"
+            fi
+        done
+        echo "  $_MAX. Start a new session"
+        echo ""
+        read -r -p "Enter selection [1]: " _SEL
+        _SEL="${_SEL:-1}"
 
-    # Sessions exist — present picker.
-    # Use screen -x (multiattach) so multiple browser tabs can share a session.
-    echo ""
-    echo "Existing sessions:"
-    for i in "${!SESSION_LABELS[@]}"; do
-        if [[ $i -eq 0 ]]; then
-            echo "  $((i+1)). ${SESSION_LABELS[$i]}  (default)"
+        if [[ "$_SEL" =~ ^[0-9]+$ ]] && [[ "$_SEL" -ge 1 ]] && [[ "$_SEL" -le "${#SESSION_IDS[@]}" ]]; then
+            # -x = multiattach: works whether the session is Detached or Attached.
+            exec screen -x "${SESSION_IDS[$((${_SEL}-1))]}"
+        elif [[ "$_SEL" =~ ^[0-9]+$ ]] && [[ "$_SEL" -eq "$_MAX" ]]; then
+            exec screen -S "sandbox-started-$(date +%Y-%m-%d-%H:%M:%S)" "$0"
         else
-            echo "  $((i+1)). ${SESSION_LABELS[$i]}"
+            echo "  Invalid — enter a number between 1 and $_MAX"
         fi
     done
-    echo "  $((${#SESSION_IDS[@]}+1)). Start a new session"
-    echo ""
-    read -r -p "Enter selection [1]: " _SEL
-    _SEL="${_SEL:-1}"
-
-    if [[ "$_SEL" =~ ^[0-9]+$ ]] && [[ "$_SEL" -ge 1 ]] && [[ "$_SEL" -le "${#SESSION_IDS[@]}" ]]; then
-        # -x = multiattach: works whether the session is Detached or Attached.
-        exec screen -x "${SESSION_IDS[$((${_SEL}-1))]}"
-    elif [[ "$_SEL" =~ ^[0-9]+$ ]] && [[ "$_SEL" -eq "$((${#SESSION_IDS[@]}+1))" ]]; then
-        exec screen -S "sandbox-started-$(date +%Y-%m-%d-%H:%M:%S)" "$0"
-    else
-        echo "Invalid selection — attaching to ${SESSION_LABELS[0]}"
-        exec screen -x "${SESSION_IDS[0]}"
-    fi
 fi
 # --- From here on we are inside a screen session ---
 
-# Rebuild available tool list from AVAILABLE_TOOLS_ENV (space-separated) exported by entrypoint.sh.
-# Fall back to scanning TOOLS env var directly if env var is missing (defensive).
-AVAILABLE_TOOLS=()
-if [[ -n "${AVAILABLE_TOOLS_ENV:-}" ]]; then
-    read -ra AVAILABLE_TOOLS <<< "$AVAILABLE_TOOLS_ENV"
-else
-    IFS=',' read -ra _TOOLS_LIST <<< "${TOOLS:-opencode}"
-    for _t in "${_TOOLS_LIST[@]}"; do
-        _t="${_t// /}"
-        if [[ "$_t" =~ ^[a-zA-Z0-9_-]+$ ]] && command -v "$_t" &>/dev/null; then
-            AVAILABLE_TOOLS+=("$_t")
-        fi
-    done
-fi
-
-if [[ ${#AVAILABLE_TOOLS[@]} -eq 0 ]]; then
-    echo ">>> No agent tools available. Check the TOOLS environment variable."
+# Tool list is built and validated once by entrypoint.sh, exported as AVAILABLE_TOOLS_ENV.
+if [[ -z "${AVAILABLE_TOOLS_ENV:-}" ]]; then
+    echo ">>> AVAILABLE_TOOLS_ENV is not set — was this session started through entrypoint.sh?"
     exit 1
 fi
+read -ra AVAILABLE_TOOLS <<< "$AVAILABLE_TOOLS_ENV"
 
 # Select tool — skip menu if DEFAULT_TOOL is set or only one tool exists.
 TOOL=""
@@ -125,7 +111,8 @@ else
                [[ "$((SELECTION-1))" -lt "${#AVAILABLE_TOOLS[@]}" ]]; then
                 TOOL="${AVAILABLE_TOOLS[$((SELECTION-1))]}"
             else
-                echo ">>> Invalid selection '$SELECTION' — defaulting to ${AVAILABLE_TOOLS[0]}"
+                echo ">>> Invalid selection '$SELECTION' — defaulting to ${AVAILABLE_TOOLS[0]} in 3 seconds..."
+                sleep 3
                 TOOL="${AVAILABLE_TOOLS[0]}"
             fi
             ;;

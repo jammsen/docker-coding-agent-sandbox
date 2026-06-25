@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Image Upload — Sandbox</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="card">
+  <h1>Image Upload</h1>
+  <p class="subtitle">Upload images, then paste the paths into your agent terminal.</p>
+
+  <div class="drop-zone" id="dropZone">
+    <div class="drop-icon">🖼</div>
+    <div class="drop-label"><strong>Click to browse</strong> or drag &amp; drop here</div>
+    <div class="drop-hint">PNG &middot; JPEG &middot; GIF &middot; WEBP &mdash; max 50 MB each &middot; select multiple</div>
+  </div>
+  <input type="file" id="fileInput" accept="image/*" multiple style="display:none">
+
+  <div class="paste-hint">
+    Or press <kbd>Ctrl</kbd>+<kbd>V</kbd> anywhere on this page to paste from clipboard
+  </div>
+
+  <div id="queueSection" class="queue-section" style="display:none">
+    <div class="queue-header">
+      <span id="queueCount" class="queue-count-label"></span>
+      <button id="btnClearAll" class="btn-ghost">Clear all</button>
+    </div>
+    <div id="queueGrid" class="queue-grid"></div>
+    <div class="actions">
+      <button id="btnUpload" disabled>Upload</button>
+    </div>
+  </div>
+</div>
+
+<div class="card gallery-card">
+  <div class="gallery-header">
+    <h2>Recent Uploads</h2>
+    <button id="btnRefresh">&#x21bb; Refresh</button>
+  </div>
+  <div id="galleryEmpty" class="gallery-empty">No images uploaded yet.</div>
+  <div id="galleryGrid" class="gallery-grid" style="display:none"></div>
+</div>
+
+<div class="modal" id="modal">
+  <div class="modal-backdrop" id="modalBackdrop"></div>
+  <div class="modal-box">
+    <button id="btnModalClose">&#x2715;</button>
+    <img id="modalImg" src="" alt="">
+    <div class="modal-name" id="modalName"></div>
+
+    <div id="modalPathRow" class="result-row" style="display:none">
+      <div class="result-label">Path</div>
+      <div class="path-box">
+        <span id="modalPath" class="mono-path"></span>
+        <button id="btnModalCopyPath">Copy</button>
+      </div>
+    </div>
+
+    <div id="modalPromptRow" class="result-row" style="display:none">
+      <div class="result-label">Prompt</div>
+      <div class="path-box">
+        <span id="modalPrompt" class="modal-prompt-text"></span>
+        <button id="btnModalCopyPrompt">Copy</button>
+      </div>
+    </div>
+
+    <div id="modalDeleteRow" class="modal-delete-row" style="display:none">
+      <button id="btnModalDelete">&#x1F5D1; Delete image</button>
+    </div>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>

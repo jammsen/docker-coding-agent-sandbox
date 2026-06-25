@@ -3,7 +3,7 @@ services:
     build:
       context: .
       args:
-        PYTHON_VERSION: "3.13"   # override here to change the Python version
+        PYTHON_VERSION: "3.13"                  # override here to change the Python version
     container_name: agentic-harness-sandbox
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -11,28 +11,28 @@ services:
       - HOME=/home/agent
       - SHELL=/bin/bash
       - USER=agent
-      - LANG=C.UTF-8          # ensures TUI apps (opencode, omp) render Unicode box-drawing chars
+      - LANG=C.UTF-8                            # ensures TUI apps (opencode, omp) render Unicode box-drawing chars
       - LC_ALL=C.UTF-8
-      - TOOLS=opencode,omp,claude   # order defines menu order and default (first = default)
-      - DEFAULT_TOOL=${DEFAULT_TOOL:-}  # pass-through from host shell; empty = show menu in browser
-      - CLAUDE_CODE_NO_FLICKER=1        # prevents Claude Code from using alt-screen tricks that break scroll in WeTTY
+      - TOOLS=claude,opencode,omp               # order defines menu order and default (first = default)
+      - DEFAULT_TOOL=${DEFAULT_TOOL:-}          # pass-through from host shell; empty = show menu in browser
+      - CLAUDE_CODE_NO_FLICKER=1                # prevents Claude Code from using alt-screen tricks that break scroll in WeTTY
       - LITELLM_UPSTREAM=http://agentic-litellm:4000   # upstream for claude-shim.js (Claude image-rewrite proxy on 127.0.0.1:4001)
-    init: true                           # tini as PID 1 — reaps zombie child processes
-    restart: unless-stopped              # auto-restart on failure or host reboot
-    read_only: false                   # opencode writes session state
+    init: true                                  # tini as PID 1 — reaps zombie child processes
+    restart: unless-stopped                     # auto-restart on failure or host reboot
+    read_only: false                            # opencode writes session state
     security_opt:
-      - no-new-privileges:true         # prevent privilege escalation
+      - no-new-privileges:true                  # prevent privilege escalation
     cap_drop:
-      - ALL                            # drop all Linux capabilities
+      - ALL                                     # drop all Linux capabilities
     cap_add:
-      - CHOWN                          # entrypoint: chown -R on /home/agent
-      - SETUID                         # gosu + useradd/usermod
-      - SETGID                         # gosu + groupadd/groupmod
-      - DAC_OVERRIDE                   # allows root to chown/access files it doesn't own
+      - CHOWN                                   # entrypoint: chown -R on /home/agent
+      - SETUID                                  # gosu + useradd/usermod
+      - SETGID                                  # gosu + groupadd/groupmod
+      - DAC_OVERRIDE                            # allows root to chown/access files it doesn't own
     ports:
-      - "1111:1111/tcp"   # wetty browser terminal — open https://<host>:1111
-      - "1112:1112/tcp"   # image upload companion — open https://<host>:1112
-      - "3000:3000/tcp"   # agent dev server port (Vite, Express, Django, Flask, etc.)
+      - "1111:1111/tcp"                         # wetty browser terminal — open https://<host>:1111
+      - "1112:1112/tcp"                         # image upload companion — open https://<host>:1112
+      - "3000:3000/tcp"                         # agent dev server port (Vite, Express, Django, Flask, etc.)
     volumes:
       # Config files (read-only mounts)
       - ./config/opencode.json:/home/agent/.config/opencode/opencode.json:ro
@@ -62,7 +62,7 @@ services:
     image: ghcr.io/berriai/litellm:v1.89.3        # latest stable as of 2026-06-22; post-attack (1.82.7/1.82.8 were the compromised PyPI versions)
     container_name: agentic-litellm
     environment:
-      - LITELLM_LOG=DEBUG                         # full request/response logging
+      - LITELLM_LOG=INFO                          # full request/response logging with DEBUG, less verbose with INFO, WARNING, ERROR, CRITICAL
       - LITELLM_FORCE_CHAT_COMPLETION=true        # force /v1/chat/completions
       - LITELLM_USE_RESPONSES_API=false           # Disable responses API path entirely
     extra_hosts:
@@ -75,16 +75,3 @@ services:
       - ./config/litellm-config.yaml:/app/config.yaml:ro
     command: ["--config", "/app/config.yaml", "--port", "4000", "--host", "0.0.0.0"]
     restart: unless-stopped
-
-  # claude-proxy:
-  #   image: ghcr.io/1rgs/claude-code-proxy:main
-  #   container_name: claude-code-proxy
-  #   environment:
-  #     - OPENAI_API_KEY=dummy
-  #     - OPENAI_BASE_URL=http://10.0.0.13:8000/v1
-  #     - BIG_MODEL=qwen3.6-35b
-  #     - SMALL_MODEL=qwen3.6-35b
-  #   ports:
-  #     - 8082:8082
-  #   restart: unless-stopped
-

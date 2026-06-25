@@ -11,3 +11,13 @@ Rules:
   summaries), and what still needs doing — with current date and time in German timezone (CET/CEST).
   Do NOT proceed to the next task until WORKLOG.md has been updated.
 - If WORKLOG.md does not exist, create it before doing anything else.
+
+## Image Analysis
+
+When asked to analyze or describe an image at a file path, run the `analyze-image` command and report its output:
+
+```bash
+analyze-image /path/to/image.png "your question or focus here"
+```
+
+Pass the user's intent as the second argument. If no specific focus is given, omit it and the default description prompt is used. Do not attempt to read the raw binary file, install packages, or write Python scripts to inspect the image. The `analyze-image` command handles vision analysis directly and returns a text description.

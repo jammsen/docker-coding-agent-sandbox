@@ -61,6 +61,7 @@ fi
 # Sync Claude Code config files into ~/.claude/ on every start so config changes take effect.
 # The source files are mounted read-only at /home/agent/.config/claude-* by compose.yml.
 # ~/.claude/ is a rw volume — Claude Code writes session state there alongside these files.
+# This is needed because unlike the other tools, Claude Code saves its config with the session state in ~/.claude/ instead of reading it from the config dir.
 CLAUDE_CFG_SRC_SETTINGS="$APP_HOME/.config/claude-settings.json"
 CLAUDE_CFG_SRC_CLAUDE_MD="$APP_HOME/.config/claude-CLAUDE.md"
 CLAUDE_CFG_SRC_AGENTS="$APP_HOME/.config/claude-agents"
@@ -128,14 +129,24 @@ fi
 # Export available tools as a space-separated string — inherited by agent-session.sh via wetty.
 export AVAILABLE_TOOLS_ENV="${AVAILABLE_TOOLS[*]}"
 
-# Start the image upload companion server in the background (runs as agent)
-gosu agent node /upload-server.js &
+# _supervise <name> <restart_delay_s> <cmd...>  — restarts cmd on crash without touching wetty/sessions.
+_supervise() {
+    local name="$1" delay="$2"; shift 2
+    while true; do
+        "$@"
+        echo "> [Supervisor] $name exited (exit $?) — restarting in ${delay} s" >&2
+        sleep "$delay"
+    done
+}
+
+# Start the image upload companion server (addon — 30 s restart delay)
+( _supervise upload-server 30 gosu agent node /upload-server.js ) &
 echo "> Upload server started on port 1112 — https://<your-server-ip>:1112"
 
-# Start the Claude→LiteLLM rewrite proxy (runs as agent, listens on 127.0.0.1:4001).
+# Start the Claude→LiteLLM rewrite proxy (critical for image analysis — 5 s restart delay).
 # It lifts images out of Claude Code's tool_result blocks so LiteLLM forwards them to vLLM
 # instead of dropping them. Claude Code reaches it via ANTHROPIC_BASE_URL=http://127.0.0.1:4001.
-gosu agent node /claude-shim.js &
+( _supervise claude-shim 5 gosu agent node /claude-shim.js ) &
 echo "> Claude image-rewrite proxy started on 127.0.0.1:4001 → ${LITELLM_UPSTREAM:-http://agentic-litellm:4000}"
 
 echo "> Starting WeTTY browser terminal on port 1111..."

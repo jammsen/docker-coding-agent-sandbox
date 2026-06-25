@@ -34,10 +34,27 @@ cd /home/agent/workspace
 # writable fs limited to workspace+data), so default to autonomous tool use for a usable task runner.
 # Pass your own --permission-mode (e.g. plan) or --dangerously-skip-permissions to override.
 mode=(--permission-mode bypassPermissions)
+_prev=""
 for arg in "$@"; do
     case "$arg" in
-        --permission-mode|--permission-mode=*|--dangerously-skip-permissions) mode=() ;;
+        --permission-mode=*|--dangerously-skip-permissions) mode=() ;;
+        --permission-mode)
+            # bare form: next arg must be the value; if it's missing or looks like a flag, error out
+            mode=()
+            _prev="--permission-mode"
+            ;;
+        *)
+            if [[ "$_prev" = "--permission-mode" && ("$arg" = -* || -z "$arg") ]]; then
+                echo "Usage: agent-task \"<prompt>\" --permission-mode <value>" >&2
+                exit 64
+            fi
+            _prev=""
+            ;;
     esac
 done
+if [[ "$_prev" = "--permission-mode" ]]; then
+    echo "agent-task: --permission-mode requires a value (e.g. --permission-mode plan)" >&2
+    exit 64
+fi
 
 exec claude -p "${mode[@]}" "$@"

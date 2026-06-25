@@ -65,16 +65,10 @@ RUN sed -i \
     && grep -q 'resolve(0)' /usr/local/lib/node_modules/wetty/build/server/spawn/env.js \
     && echo 'env.js patched OK'
 
-# Inject upload icon into wetty's page (links to upload server on port 1112).
-# Port resolved at browser runtime via JS — no host hardcoded in the image.
-RUN node -e 'const fs=require("fs"),\
-    f="/usr/local/lib/node_modules/wetty/build/server/socketServer/html.js",\
-    a="<a id=\"ub\" href=\"#\" target=\"_blank\" rel=\"noopener\" class=\"toggler\" title=\"Upload Image\" style=\"top:36px;\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 448 512\" fill=\"currentColor\" width=\"1em\" height=\"1em\"><path d=\"M246.6 9.4c-12.5-12.5-32.8-12.5-45.3 0l-128 128c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0L192 109.3 192 320c0 17.7 14.3 32 32 32s32-14.3 32-32l0-210.7 73.4 73.4c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3l-128-128zM64 352c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 64c0 53 43 96 96 96l256 0c53 0 96-43 96-96l0-64c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 64c0 17.7-14.3 32-32 32L96 448c-17.7 0-32-14.3-32-32l0-64z\"/></svg></a>",\
-    s="<scr"+"ipt>document.getElementById(\"ub\").href=location.protocol+\"//\"+location.hostname+\":1112\";</"+"script>",\
-    h=fs.readFileSync(f,"utf8");\
-    fs.writeFileSync(f,h.replace("<iframe class=\"editor\"",a+s+"<iframe class=\"editor\""));\
-    console.log("wetty upload link injected OK")' \
-    && grep -q 'id="ub"' /usr/local/lib/node_modules/wetty/build/server/socketServer/html.js
+# Patch WeTTY — CSP frameSrc + upload overlay panel.
+# Scripts live in patches/ and are removed after use (not needed at runtime).
+COPY --chmod=644 patches/ /tmp/patches/
+RUN node /tmp/patches/wetty-csp.js && node /tmp/patches/wetty-html.js && rm -rf /tmp/patches
 
 # Self-signed TLS cert for WeTTY — avoids browser HTTPS-upgrade blocking on HTTP
 # Browsers show a one-time "proceed anyway" warning, then work fine.
@@ -161,7 +155,9 @@ WORKDIR /
 COPY --chmod=744 scripts/entrypoint.sh /
 COPY --chmod=755 scripts/agent-session.sh /agent-session.sh
 COPY --chmod=644 scripts/upload-server.js /upload-server.js
+COPY --chmod=755 scripts/upload-server/ /upload-server/
 COPY --chmod=644 scripts/claude-shim.js /claude-shim.js
 COPY --chmod=755 scripts/agent-task.sh /usr/local/bin/agent-task
+COPY --chmod=755 scripts/analyze-image.js /usr/local/bin/analyze-image
 
 ENTRYPOINT ["./entrypoint.sh"]

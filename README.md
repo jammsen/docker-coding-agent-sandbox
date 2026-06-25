@@ -199,19 +199,26 @@ Enter selection [1]:
 - **Start a new session** — creates a fresh screen session with a new timestamped name and runs the tool selector again.
 - **Close the browser tab** — detaches from screen. The agent keeps running. Reopen the browser and reattach to continue where you left off.
 - **Stale sessions** are automatically cleaned up with `screen -wipe` on each connect.
+- **First-ever connection** (no existing sessions) — the picker shows only "Start a new session". Press Enter or type `1` to start; any other input re-prompts.
+- **Invalid input** — the picker re-prompts rather than silently defaulting.
 
-### Modes (OpenCode)
+#### Why two separate scripts?
 
-OpenCode has two interaction modes:
+`entrypoint.sh` and `agent-session.sh` have different lifetimes and different jobs:
 
-| Mode  | Shortcut | Token overhead | Best for                               |
-| ----- | -------- | -------------- | -------------------------------------- |
-| Build | default  | ~10k tokens    | Agentic file editing, multi-step tasks |
-| Ask   | `tab`    | ~3-5k tokens   | Questions, code review, explanations   |
+- **`entrypoint.sh`** runs **once** at container startup as root. It owns all system-level work: UID/GID setup, chown, config sync, starting the supervised background services (upload server, claude-shim). It never drops to the agent user itself because it must stay alive as the process supervisor.
+- **`agent-session.sh`** runs **once per browser tab**, spawned by WeTTY as root. Its first act is `gosu agent` — dropping privileges before doing anything else. By that point `entrypoint.sh` has already guaranteed the environment is correct, so no re-validation is needed. It only handles the session picker and tool selection.
 
-With a 32k context limit, **Ask mode** leaves significantly more room for your actual code and conversation.
+The scripts look unbalanced because they serve different scopes: one-time system setup vs. per-connection user logic.
 
-OMP does not have a comparable mode concept — it operates as a single interactive session.
+### Modes and initial token overhead
+
+| Tool       | Mode    | Shortcut | Token overhead          | Best for                               | Notes                                                                                                     |
+| ---------- | ------- | -------- | ----------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| OpenCode   | Build   | default  | ~10k tokens             | Agentic file editing, multi-step tasks |                                                                                                           |
+| OpenCode   | Ask     | `tab`    | ~3–5k tokens            | Questions, code review, explanations   | Leaves significantly more room with a 32k context limit                                                   |
+| Claude Code | Default | —       | ~27k tokens             | All tasks                              | ~2.5k system prompt + ~14–17k tool definitions; volatile across patch releases, grows with CLAUDE.md files |
+| OMP        | Default | —        | Not publicly documented | All tasks                              | Single interactive session, no mode concept                                                               |
 
 ### Uploading screenshots and images
 
@@ -229,12 +236,12 @@ After clicking **Upload**, the page shows:
 
 ```
 Please post this path to your agent:
-/home/agent/workspace/uploads/2026-06-21-14-30-00.png
+/home/agent/workspace/uploads/2026-06-21-14-30-00-a3f2.png
 ```
 
 Copy the path and paste it into the terminal. The upload icon (↑) in the WeTTY sidebar links directly to the upload page.
 
-Files are saved to `./workspace/uploads/` on your host (same mount as the workspace). Only PNG, JPEG, GIF, and WEBP are accepted; files are validated by magic bytes, not just filename extension. Maximum size is 50 MB.
+Files are saved to `./workspace/uploads/` on your host (same mount as the workspace). Only PNG, JPEG, GIF, and WEBP are accepted; files are validated by magic bytes, not just filename extension. Maximum size is 50 MB. Filenames include a short random suffix to prevent collisions when multiple uploads land in the same second.
 
 ---
 
@@ -245,7 +252,7 @@ WeTTY is a browser terminal, so you **cannot paste a screenshot into the Claude 
 1. Upload the image via the companion page (`https://<host>:1112`) — see [Uploading screenshots and images](#uploading-screenshots-and-images).
 2. In the terminal, type the path and ask for analysis, e.g.:
    ```
-   Analyse the image at /home/agent/workspace/uploads/2026-06-21-14-30-00.png and describe what you see.
+   Analyse the image at /home/agent/workspace/uploads/2026-06-21-14-30-00-a3f2.png and describe what you see.
    ```
 3. Claude Code uses its **Read tool** on that path. Read natively encodes the file and sends it to the model as a real image block — this is the only mechanism that delivers actual pixels. Do **not** ask the model to `base64`-encode the file by hand; raw base64 text is not an image and the model cannot see it.
 
@@ -256,7 +263,7 @@ Claude Code ──Anthropic /v1/messages──▶ claude-shim (127.0.0.1:4001)
             ──▶ LiteLLM (agentic-litellm:4000) ──▶ vLLM (/v1/chat/completions)
 ```
 
-- **`claude-shim`** (`scripts/claude-shim.js`, started by the entrypoint) is a tiny pure-stdlib proxy. Claude Code's Read tool returns images inside Anthropic `tool_result` blocks, and LiteLLM drops images nested there when translating to chat/completions (OpenAI tool-role messages cannot carry images). The shim lifts each image out of the `tool_result` into a normal user message before forwarding — the placement vLLM accepts — and streams everything else through untouched.
+- **`claude-shim`** (`scripts/claude-shim.js`, started by the entrypoint) is a tiny pure-stdlib proxy. Claude Code's Read tool returns images inside Anthropic `tool_result` blocks, and LiteLLM drops images nested there when translating to chat/completions (OpenAI tool-role messages cannot carry images). The shim lifts each image out of the `tool_result` into a normal user message before forwarding — the placement vLLM accepts — and streams everything else through untouched. Both the shim and the upload server are supervised: if either crashes it restarts automatically (shim within 5 s, upload server within 30 s) without disrupting running agent sessions.
 - **LiteLLM** (the `litellm` service in `compose.yml`) maps the Anthropic model aliases (`claude-sonnet-4-5`, `claude-haiku-4-5`) onto your vLLM model and translates Anthropic↔OpenAI. The backend model is configured as `hosted_vllm/<model>` in `config/litellm-config.yaml` so LiteLLM uses chat/completions (the `openai/` prefix instead routes image requests through the OpenAI Responses API, which vLLM rejects).
 
 Your model must be **vision-capable** for any of this to return a real description. If images come back as generic hallucinations, confirm the model serves vision over chat/completions:
