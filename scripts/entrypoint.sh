@@ -58,14 +58,17 @@ if [[ "$NEEDS_CHOWN" = "true" ]]; then
     chown -R "$APP_USER":"$APP_GROUP" "$APP_HOME/.claude" 2>/dev/null || true
 fi
 
-# Sync Claude Code config files into ~/.claude/ on every start so config changes take effect.
-# The source files are mounted read-only at /home/agent/.config/claude-* by compose.yml.
-# ~/.claude/ is a rw volume — Claude Code writes session state there alongside these files.
-# This is needed because unlike the other tools, Claude Code saves its config with the session state in ~/.claude/ instead of reading it from the config dir.
+# Sync Claude Code config files on every start so config changes always take effect.
+# Sources are mounted read-only at /home/agent/.config/claude-* by compose.yml.
+# ~/.claude/ is a rw volume (session state lives there alongside the synced files).
+# ~/.claude.json is in the writable container layer — written here so onboarding/trust
+# state is always correct even after a container restart or recreation.
 CLAUDE_CFG_SRC_SETTINGS="$APP_HOME/.config/claude-settings.json"
 CLAUDE_CFG_SRC_CLAUDE_MD="$APP_HOME/.config/claude-CLAUDE.md"
 CLAUDE_CFG_SRC_AGENTS="$APP_HOME/.config/claude-agents"
 CLAUDE_DIR="$APP_HOME/.claude"
+CLAUDE_JSON_SRC="$APP_HOME/.config/claude.json"
+CLAUDE_JSON="$APP_HOME/.claude.json"
 
 if [[ -f "$CLAUDE_CFG_SRC_SETTINGS" ]]; then
     mkdir -p "$CLAUDE_DIR/agents"
@@ -77,7 +80,8 @@ if [[ -f "$CLAUDE_CFG_SRC_SETTINGS" ]]; then
             install -m644 -o "$APP_USER" -g "$APP_GROUP" "$f" "$CLAUDE_DIR/agents/$(basename "$f")"
         done
     fi
-    echo "> Claude Code config synced to $CLAUDE_DIR"
+    [[ -f "$CLAUDE_JSON_SRC" ]] && install -m600 -o "$APP_USER" -g "$APP_GROUP" "$CLAUDE_JSON_SRC" "$CLAUDE_JSON"
+    echo "> Claude Code config synced to $CLAUDE_DIR and $CLAUDE_JSON"
 fi
 
 OPENCODE_WORKSPACE="/home/agent/workspace"

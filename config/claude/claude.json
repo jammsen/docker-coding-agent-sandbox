@@ -1,0 +1,15 @@
+{
+  "hasCompletedOnboarding": true,
+  "hasTrustDialogAccepted": true,
+  "theme": "dark",
+  "customApiKeyResponses": {
+    "approved": ["dummy"],
+    "rejected": []
+  },
+  "projects": {
+    "/home/agent/workspace": {
+      "hasTrustDialogAccepted": true,
+      "hasCompletedProjectOnboarding": true
+    }
+  }
+}

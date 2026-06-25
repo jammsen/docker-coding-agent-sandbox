@@ -34,27 +34,28 @@ services:
       - "1112:1112/tcp"                         # image upload companion — open https://<host>:1112
       - "3000:3000/tcp"                         # agent dev server port (Vite, Express, Django, Flask, etc.)
     volumes:
-      # Config files (read-only mounts)
-      - ./config/opencode.json:/home/agent/.config/opencode/opencode.json:ro
-      - ./config/AGENTS.md:/home/agent/.config/opencode/AGENTS.md:ro
-      - ./.opencode/skills:/home/agent/.config/opencode/skills:ro
-      - ./.opencode/commands:/home/agent/.config/opencode/commands:ro
-      - ./.opencode/agents:/home/agent/.config/opencode/agents:ro
-      # OMP Config files (omp-config.yml must be rw so OMP can persist setupVersion)
-      - ./config/omp-config.yml:/home/agent/.omp/agent/config.yml:rw
-      - ./config/omp-settings.json:/home/agent/.omp/agent/settings.json:rw
-      - ./config/omp-models.yml:/home/agent/.omp/agent/models.yml:ro
-      - ./config/omp-AGENTS.md:/home/agent/.omp/agent/AGENTS.md:ro
+      # opencode config (read-only mounts)
+      - ./config/opencode/opencode.json:/home/agent/.config/opencode/opencode.json:ro
+      - ./config/opencode/AGENTS.md:/home/agent/.config/opencode/AGENTS.md:ro
+      - ./config/opencode/skills:/home/agent/.config/opencode/skills:ro
+      - ./config/opencode/commands:/home/agent/.config/opencode/commands:ro
+      - ./config/opencode/agents:/home/agent/.config/opencode/agents:ro
+      # OMP config (omp-config.yml must be rw so OMP can persist setupVersion)
+      - ./config/omp/config.yml:/home/agent/.omp/agent/config.yml:rw
+      - ./config/omp/settings.json:/home/agent/.omp/agent/settings.json:rw
+      - ./config/omp/models.yml:/home/agent/.omp/agent/models.yml:ro
+      - ./config/omp/AGENTS.md:/home/agent/.omp/agent/AGENTS.md:ro
       # Claude Code config (read-only sources; entrypoint syncs them into ~/.claude/ on start)
-      - ./config/claude-settings.json:/home/agent/.config/claude-settings.json:ro
-      - ./config/claude-CLAUDE.md:/home/agent/.config/claude-CLAUDE.md:ro
-      - ./config/claude-agents:/home/agent/.config/claude-agents:ro
+      - ./config/claude/settings.json:/home/agent/.config/claude-settings.json:ro
+      - ./config/claude/CLAUDE.md:/home/agent/.config/claude-CLAUDE.md:ro
+      - ./config/claude/agents:/home/agent/.config/claude-agents:ro
+      - ./config/claude/claude.json:/home/agent/.config/claude.json:ro
       # Claude Code session state (transcripts, checkpoints, etc.)
       - ./data/claude:/home/agent/.claude:rw
       # Your project workspace (read-write so tools can edit files)
       - ./workspace:/home/agent/workspace:rw
       - ./data/opencode:/home/agent/.local/share/opencode
-      - ./config/auth.json:/home/agent/.local/share/opencode/auth.json:ro
+      - ./config/opencode/auth.json:/home/agent/.local/share/opencode/auth.json:ro
     # No network_mode: host — use bridge so container is isolated
     # but can still reach your vLLM server via host IP
 

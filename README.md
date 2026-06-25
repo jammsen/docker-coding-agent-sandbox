@@ -43,7 +43,7 @@ A companion **image upload page** runs on `https://<host>:1112`. Paste a screens
 - Access to a running vLLM server exposing an OpenAI-compatible API (e.g. `http://10.0.0.13:8000`)
 - Your vLLM server must have the model loaded and `/v1/models` responding
 
-> **How this works:** The agent tools running inside the container are clients to your external vLLM server. They have no direct access to the model weights — all inference goes through the API endpoint. If a tool ever needs to identify which model it is using, it must look it up via the API or a web search based on the model ID configured in `config/opencode.json` / `config/omp-models.yml`.
+> **How this works:** The agent tools running inside the container are clients to your external vLLM server. They have no direct access to the model weights — all inference goes through the API endpoint. If a tool ever needs to identify which model it is using, it must look it up via the API or a web search based on the model ID configured in `config/opencode/opencode.json` / `config/omp/models.yml`.
 
 Verify your vLLM is reachable before starting:
 
@@ -80,19 +80,25 @@ docker-agentic-harness-sandbox/
 │   ├── wetty-csp.js        ← allows the upload-server iframe to load inside WeTTY without being browser-blocked
 │   └── wetty-html.js       ← injects the upload overlay panel (toggle button + slide-in drawer) into WeTTY's page
 ├── config/
-│   ├── opencode.json       ← opencode provider and agent config (mounted read-only)
-│   ├── AGENTS.md           ← global sandbox rules for opencode (mounted read-only)
-│   ├── auth.json           ← opencode provider auth tokens (mounted read-only) — edit before use
-│   ├── omp-AGENTS.md       ← sandbox rules for omp (mounted read-only)
-│   ├── omp-config.yml      ← OMP model role assignments
-│   ├── omp-models.yml      ← OMP provider and model definitions (mounted read-only)
-│   ├── omp-settings.json   ← OMP settings
-│   ├── claude-settings.json← Claude Code settings (env, model, ANTHROPIC_BASE_URL → shim)
-│   ├── claude-CLAUDE.md    ← global sandbox rules for Claude Code
-│   ├── claude-agents/      ← Claude Code subagents synced into ~/.claude/agents
+│   ├── opencode/
+│   │   ├── opencode.json   ← opencode provider and agent config (mounted read-only)
+│   │   ├── AGENTS.md       ← global sandbox rules for opencode (mounted read-only)
+│   │   ├── auth.json       ← opencode provider auth tokens (mounted read-only) — edit before use
+│   │   ├── agents/         ← opencode subagent definitions
+│   │   ├── commands/       ← slash commands available inside opencode
+│   │   └── skills/         ← reusable skill definitions for opencode
+│   ├── omp/
+│   │   ├── AGENTS.md       ← sandbox rules for omp (mounted read-only)
+│   │   ├── config.yml      ← OMP model role assignments
+│   │   ├── models.yml      ← OMP provider and model definitions (mounted read-only)
+│   │   └── settings.json   ← OMP settings
+│   ├── claude/
+│   │   ├── settings.json   ← Claude Code settings (env, model, ANTHROPIC_BASE_URL → shim)
+│   │   ├── CLAUDE.md       ← global sandbox rules for Claude Code
+│   │   ├── claude.json     ← first-run state: dark mode, workspace trust, API key accepted
+│   │   └── agents/         ← Claude Code subagents synced into ~/.claude/agents
 │   └── litellm-config.yaml ← LiteLLM proxy: maps Anthropic aliases onto your vLLM model
 ├── data/                   ← tool session state, persisted across runs (opencode/, claude/)
-├── .opencode/              ← global sandbox commands, skills, and agents (mounted read-only)
 ├── ideas/                  ← design notes and drafts
 └── workspace/              ← put your code projects here (uploads/ holds uploaded images)
 ```
@@ -321,7 +327,7 @@ Then reconnect in the browser.
 docker exec agentic-harness-sandbox cat /home/agent/.config/opencode/opencode.json
 ```
 
-If this returns an error, check that `docker compose` is run from the same directory as `compose.yml` and that `./config/opencode.json` exists.
+If this returns an error, check that `docker compose` is run from the same directory as `compose.yml` and that `./config/opencode/opencode.json` exists.
 
 **`GID already exists` error during build**
 
@@ -419,12 +425,12 @@ Then rebuild:
 Sandbox-wide commands and skills are mounted globally:
 
 ```yaml
-- ./config/AGENTS.md:/home/agent/.config/opencode/AGENTS.md:ro
-- ./.opencode/commands:/home/agent/.config/opencode/commands:ro
-- ./.opencode/skills:/home/agent/.config/opencode/skills:ro
+- ./config/opencode/AGENTS.md:/home/agent/.config/opencode/AGENTS.md:ro
+- ./config/opencode/commands:/home/agent/.config/opencode/commands:ro
+- ./config/opencode/skills:/home/agent/.config/opencode/skills:ro
 ```
 
-Note: `./config/AGENTS.md` is intentionally separate from `./config/opencode.json` — the AGENTS.md path is referenced in the opencode system prompt and must be mounted at its exact target location.
+Note: `./config/opencode/AGENTS.md` is intentionally separate from `./config/opencode/opencode.json` — the AGENTS.md path is referenced in the opencode system prompt and must be mounted at its exact target location.
 
 This makes the commands available regardless of which project under `./workspace/` you open. Project-specific commands, skills, and `AGENTS.md` files can still live inside the project directory.
 
