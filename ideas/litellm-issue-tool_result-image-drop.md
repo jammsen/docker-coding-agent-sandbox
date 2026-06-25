@@ -35,6 +35,8 @@ This is the standard shape produced by **Claude Code's `Read` tool**, which retu
 The same image placed **directly in a user message** (not wrapped in `tool_result`) translates correctly and the model sees it — so the bug is specific to the `tool_result` nesting. Root cause appears to be the Anthropic→OpenAI converter in
 `litellm/llms/anthropic/experimental_pass_through/adapters/transformation.py` only forwarding text-type sub-blocks of a `tool_result` (the exact pattern #6953/#6965 fixed for the opposite direction, and that #23844 is extending to `input_text` — but not to `image`).
 
+**Also reproduces on the latest `main` build**, not just stable. On `ghcr.io/berriai/litellm:main-latest` (digest `sha256:f792e404f0db3b8c8d841e25e8c7b373df6079b74d660068a6d4974345c8d43d`, pulled 2026-06-25), `main`'s adapter *does* now translate the `tool_result` image into an `image_url` part — but it places that part inside the `role:"tool"` message, and the image **still never reaches the backend** (OpenAI/vLLM do not accept images in tool-role messages, so it is dropped at the provider boundary). In other words the existing in-tool-message handling moves the drop from the adapter to the provider serialization but does not fix it; the image has to be relocated to a `role:"user"` message to survive. Verified end-to-end against a vision-capable vLLM: same `tool_result` request hallucinates on both `v1.89.3` and `main-latest`, while the identical image in a user message (or hoisted into one) is described correctly.
+
 **Impact:** the Claude Code → LiteLLM → vLLM/OpenAI path cannot do image analysis at all; every image request returns a confident hallucination with no error surfaced (see also the umbrella report #30043).
 
 ## Steps to reproduce
@@ -85,9 +87,11 @@ The same image placed **directly in a user message** (not wrapped in `tool_resul
 
 4. With `LITELLM_LOG=DEBUG`, inspect the translated request LiteLLM sends to the backend. For step 2 it contains an `image_url` part; for step 3 there are **0** `image_url` / image parts — the image is gone.
 
+5. **Confirm the fix shape (works).** Re-send step 3 with the image moved *out* of the `tool_result` and into a trailing user message — `{"role":"user","content":[{"type":"text","text":"Image returned by the tool:"},{"type":"image","source":{…}}]}` — leaving a text placeholder in the `tool_result`. The model now describes the image correctly. Verified on both `v1.89.3` and `main-latest`.
+
 **Expected:** the `image` block inside `tool_result` is forwarded to the backend (e.g. hoisted into an adjacent user message, the way clients/proxies handle the OpenAI limitation that tool-role messages can't carry images), so the backend receives `image_url` in both cases.
 
-**Actual:** step 3's outgoing payload has no image; a vision backend gets text only and hallucinates.
+**Actual:** step 3's outgoing payload has no image; a vision backend gets text only and hallucinates. On `main-latest` the adapter emits an `image_url` inside the `role:"tool"` message, but it is still absent from the request that reaches the backend.
 
 ## Relevant log output
 
@@ -98,9 +102,11 @@ The same image placed **directly in a user message** (not wrapped in `tool_resul
   "tool_call_id": "toolu_01",
   "content": "[image content omitted by translation]"
 }
-# grep over the outgoing /chat/completions body:
-#   image_url   -> 0 matches
+# grep over the outgoing /chat/completions body that reaches the backend:
+#   image_url   -> 0 matches   (v1.89.3 AND main-latest)
 #   input_image -> 0 matches
+# On main-latest the adapter builds an image_url inside the role:"tool" message, but it is
+# stripped before the request hits the backend (tool-role messages cannot carry images).
 ```
 
 ## What LiteLLM component is this bug for?
@@ -109,7 +115,7 @@ Proxy   <!-- dropdown options: SDK (Python package) · Proxy · UI Dashboard · 
 
 ## What LiteLLM version are you on?
 
-v1.89.3 (`ghcr.io/berriai/litellm:v1.89.3`)
+v1.89.3 (`ghcr.io/berriai/litellm:v1.89.3`) — also reproduced on `main-latest` (`ghcr.io/berriai/litellm@sha256:f792e404f0db3b8c8d841e25e8c7b373df6079b74d660068a6d4974345c8d43d`, pulled 2026-06-25).
 
 ## Twitter / LinkedIn details
 
@@ -119,8 +125,53 @@ _(optional — leave blank or add your handle)_
 
 ### Suggested fix
 
-Mirror the existing image handling in the OpenAI→Anthropic converter (#6965) for the Anthropic→OpenAI direction in
-`litellm/llms/anthropic/experimental_pass_through/adapters/transformation.py`: when a `tool_result` contains `image` sub-blocks, emit the image as an `image_url` part in an adjacent user message instead of discarding it (OpenAI tool-role messages cannot carry images). This is the same place PR #23844 adds `input_text` support; extending it to `image` would close this gap.
+In `litellm/llms/anthropic/experimental_pass_through/adapters/transformation.py`, the
+`elif content.get("type") == "tool_result":` branch of `translate_anthropic_messages_to_openai()`: when a
+`tool_result`'s content list contains `image` sub-blocks, do **not** keep the `image_url` inside the
+`role:"tool"` message (what `main` does today — verified above to be dropped at the backend, since
+OpenAI/vLLM tool-role messages cannot carry images). Instead keep the tool message **text-only** and emit
+the image as an `image_url` part in an **adjacent `role:"user"` message** right after it. This mirrors how
+the opposite direction was fixed in #6965, and sits in the same branch PR #23844 extends for `input_text`.
+
+Guarding against regressions: only diverge when an `image` sub-block is actually present, so text-only
+`tool_result`s produce byte-for-byte identical output. Preserve the assistant `tool_use` → `tool` ordering
+(the new user message follows the tool message; OpenAI imposes no 1:1 tool pairing on its side) and keep
+`_add_cache_control_if_applicable` on the tool message. The same change applies to the Responses-API twin in
+`…/responses_adapters/transformation.py`.
+
+Sketch of the `isinstance(content.get("content"), list)` branch:
+
+```python
+elif isinstance(content.get("content"), list):
+    text_parts, image_parts = [], []
+    for c in content.get("content", []):
+        if c.get("type") == "image":
+            # existing helper already produces {"type": "image_url", "image_url": {...}}
+            image_parts.append(self._translate_anthropic_image_to_openai(cast(dict, c["source"])))
+        elif c.get("type") in ("text", "input_text"):
+            text_parts.append({"type": "text", "text": c.get("text", "")})
+
+    # Tool message stays text-only (string content = maximum backend compatibility).
+    tool_result = ChatCompletionToolMessage(
+        role="tool",
+        tool_call_id=content.get("tool_use_id", ""),
+        content="".join(p["text"] for p in text_parts)
+        or ("[image returned by tool — see following message]" if image_parts else ""),
+    )
+    self._add_cache_control_if_applicable(content, tool_result, model)
+    tool_message_list.append(tool_result)
+
+    # OpenAI/vLLM cannot carry images in a tool-role message: hoist them into a user turn.
+    if image_parts:
+        tool_message_list.append(
+            ChatCompletionUserMessage(
+                role="user",
+                content=[{"type": "text", "text": "Image(s) returned by the tool call above:"}, *image_parts],
+            )
+        )
+```
+
+This only adds the trailing user message when `image_parts` is non-empty; the text-only path is unchanged.
 
 ### Current workaround
 
