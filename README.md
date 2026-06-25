@@ -67,22 +67,31 @@ After cloning, the repository already contains this layout:
 ```
 docker-agentic-harness-sandbox/
 ├── Dockerfile
-├── compose.yml
+├── compose.yml             ← defines the `sandbox` and `litellm` services
 ├── start.sh
-├── entrypoint.sh       ← container startup: user setup, launches WeTTY + upload server
-├── agent-session.sh    ← per-browser-connection: privilege drop, screen session, tool selection
-├── upload-server.js    ← image upload companion server (port 1112, pure Node.js stdlib)
+├── scripts/                ← runtime + maintenance scripts (baked into the image)
+│   ├── entrypoint.sh       ← container startup: user setup, launches WeTTY + upload server + shim
+│   ├── agent-session.sh    ← per-browser-connection: privilege drop, screen session, tool selection
+│   ├── agent-task.sh       ← one-shot headless Claude task as the agent user (/usr/local/bin/agent-task)
+│   ├── claude-shim.js      ← Claude→LiteLLM image-rewrite proxy (127.0.0.1:4001, pure Node.js stdlib)
+│   ├── upload-server.js    ← image upload companion server (port 1112, pure Node.js stdlib)
+│   └── reset-sandbox.sh    ← wipe generated state from ./workspace and ./data
 ├── config/
 │   ├── opencode.json       ← opencode provider and agent config (mounted read-only)
 │   ├── AGENTS.md           ← global sandbox rules for opencode (mounted read-only)
-│   ├── auth.json           ← provider auth tokens (mounted read-only) — edit before use
+│   ├── auth.json           ← opencode provider auth tokens (mounted read-only) — edit before use
 │   ├── omp-AGENTS.md       ← sandbox rules for omp (mounted read-only)
-│   ├── omp-config.yml      ← OMP model role assignments (mounted read-only)
-│   └── omp-models.yml      ← OMP provider and model definitions (mounted read-only)
-├── data/               ← tool session state, persisted across runs
-├── scripts/            ← maintenance scripts (e.g. reset-sandbox.sh)
-├── .opencode/          ← global sandbox commands and skills (mounted read-only)
-└── workspace/          ← put your code projects here
+│   ├── omp-config.yml      ← OMP model role assignments
+│   ├── omp-models.yml      ← OMP provider and model definitions (mounted read-only)
+│   ├── omp-settings.json   ← OMP settings
+│   ├── claude-settings.json← Claude Code settings (env, model, ANTHROPIC_BASE_URL → shim)
+│   ├── claude-CLAUDE.md    ← global sandbox rules for Claude Code
+│   ├── claude-agents/      ← Claude Code subagents synced into ~/.claude/agents
+│   └── litellm-config.yaml ← LiteLLM proxy: maps Anthropic aliases onto your vLLM model
+├── data/                   ← tool session state, persisted across runs (opencode/, claude/)
+├── .opencode/              ← global sandbox commands, skills, and agents (mounted read-only)
+├── ideas/                  ← design notes and drafts
+└── workspace/              ← put your code projects here (uploads/ holds uploaded images)
 ```
 
 ---

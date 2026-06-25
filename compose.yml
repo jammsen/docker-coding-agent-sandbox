@@ -67,8 +67,10 @@ services:
       - LITELLM_USE_RESPONSES_API=false           # Disable responses API path entirely
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    ports:
-      - "4000:4000/tcp"   # litellm proxy — exposed for debugging the Anthropic→vLLM translation
+    # No published ports — the sandbox reaches this proxy over the internal docker network
+    # (agentic-litellm:4000). Uncomment below only to debug the Anthropic→vLLM translation from the host.
+    # ports:
+    #   - "4000:4000/tcp"
     volumes:
       - ./config/litellm-config.yaml:/app/config.yaml:ro
     command: ["--config", "/app/config.yaml", "--port", "4000", "--host", "0.0.0.0"]
