@@ -4,7 +4,6 @@
 //! thinking — vLLM's `delta.reasoning` to Anthropic `thinking` blocks. A single monotonic block
 //! index spans thinking/text/tool_use blocks.
 
-use axum::http::StatusCode;
 use axum::response::sse::{Event, Sse};
 use axum::response::{IntoResponse, Response};
 use serde_json::{Value, json};
@@ -12,45 +11,42 @@ use std::convert::Infallible;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
+use crate::ProxyError;
 use crate::anthropic::SYNTHETIC_SIGNATURE;
 use crate::openai::{ChatChunk, ChatRequest};
 
 /// POST the streaming request to vLLM and return an axum SSE response carrying the translated
-/// Anthropic Messages event stream.
+/// Anthropic Messages event stream. Pre-stream failures (connect/timeout/non-2xx) become a clean
+/// `ProxyError` (correct status); once the 200 SSE has started we can no longer change the status.
 pub async fn stream(
     client: reqwest::Client,
     url: String,
     model: String,
     mut oai: ChatRequest,
     thinking: bool,
-) -> Response {
+) -> Result<Response, ProxyError> {
     oai.stream = Some(true);
     oai.stream_options = Some(crate::openai::StreamOptions { include_usage: true });
 
-    let upstream = client
+    // No overall timeout: a stream legitimately runs long (connect_timeout still guards the dial).
+    let resp = client
         .post(format!("{url}/v1/chat/completions"))
         .bearer_auth("dummy")
         .json(&oai)
         .send()
-        .await;
+        .await
+        .map_err(ProxyError::from_reqwest)?;
 
-    let resp = match upstream {
-        Ok(r) => r,
-        Err(e) => {
-            return crate::anthropic_error(StatusCode::BAD_GATEWAY, format!("upstream request failed: {e}"));
-        }
-    };
-    if !resp.status().is_success() {
-        let status = resp.status();
-        let body = resp.text().await.unwrap_or_default();
-        let code = StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-        return crate::anthropic_error(code, format!("vLLM error {status}: {body}"));
+    let status = resp.status();
+    tracing::info!(model = %model, upstream_status = status.as_u16(), stream = true, "upstream");
+    if !status.is_success() {
+        return Err(ProxyError::from_upstream_status(status));
     }
 
     let (tx, rx) = mpsc::channel::<Result<Event, Infallible>>(32);
     tokio::spawn(pump(resp, model, thinking, tx));
 
-    Sse::new(ReceiverStream::new(rx)).into_response()
+    Ok(Sse::new(ReceiverStream::new(rx)).into_response())
 }
 
 /// Read vLLM's SSE chunks, translate them, and push the resulting events onto `tx`.

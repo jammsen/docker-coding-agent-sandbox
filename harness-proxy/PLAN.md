@@ -58,10 +58,22 @@ Branch: `feat/harness-proxy` (off `feat/webtty`).
 - **✅ Blocker resolved (was §2): vLLM emits standard OpenAI `tool_calls`** (`finish_reason:tool_calls`,
   `message.tool_calls[].function.{name,arguments}`) — the `hermes` path the PLAN predicted, confirmed
   empirically. No text-template parsing needed.
+- ✅ **Step 6 done**: production logging & error handling (§5d). Added `tracing` +
+  `tracing-subscriber` (stderr, `RUST_LOG` default info). A `from_fn` middleware wraps each request
+  in a span with a generated **`req-XXXXXXXX` id**, echoes it as **`x-request-id`**, and logs one
+  `handled` line (method, path, status, latency_ms) — **metadata only, never bodies/prompts/auth**.
+  One **`ProxyError`** enum (`IntoResponse`) is the single map cause→status→Anthropic envelope:
+  400 invalid_request_error (malformed body), 502 api_error (connect/DNS/TLS/5xx/decode), 504
+  api_error (timeout), 429 rate_limit_error — messages short and non-sensitive (upstream bodies never
+  echoed/logged). reqwest client has a **connect timeout (10s)** + tunable overall timeout
+  (`HARNESS_PROXY_TIMEOUT_SECS`, default 180; streaming omits the overall one). **Verified live:**
+  malformed→400, dead upstream→502, hung upstream→504 (~2s with the cap), happy path 200 — all with a
+  correlated request id and no content in the logs.
 - **Wiring:** proxy is NOT yet in Claude's path. Sandbox still uses litellm + `claude-shim.js`.
   Compose runs the proxy standalone (`agentic-harness-proxy`, bind `0.0.0.0:4000`, no published
   ports) so it doesn't interfere. Cutover is Step 7.
-- **➡️ Next: Step 6** — production logging & error handling (§5d); then Step 7 cutover.
+- **➡️ Next: Step 7 (final)** — cutover: remove litellm + claude-shim, point `ANTHROPIC_BASE_URL` at
+  the proxy, wire it into `entrypoint.sh`/`compose.yml`.
 
 ---
 
@@ -283,12 +295,10 @@ debug a failure from the logs **without** any prompt content, secret, or token e
    end-to-end (the thing LiteLLM broke): `claude -p` Read of a PNG → vision model answered "Red".
 5. ✅ **DONE (blocker resolved)** — Tool-call translation, non-stream + streaming. A `claude -p`
    Read-tool task ran the full agentic loop through the proxy and returned the file's secret.
-6. **Production logging & error handling** (independent — can land any time after Step 2, **must be
-   in before cutover**). Implement the contract in §5d: structured `tracing` logs to stderr,
-   never logging prompt/response bodies or auth; one `ProxyError` type → correct HTTP status +
-   Anthropic error envelope; client + upstream timeouts. ✅ a malformed request returns a clean
-   `400` Anthropic error, a dead upstream a `502`, an upstream timeout a `504`, and logs carry a
-   request id + status + latency but no message content.
+6. ✅ **DONE — Production logging & error handling** (§5d). `tracing`→stderr, request-id span +
+   `x-request-id`, metadata-only access log; one `ProxyError` enum → correct status + Anthropic
+   envelope; connect + tunable request timeouts. Verified live: malformed→400, dead upstream→502,
+   hung upstream→504, with a request id + status + latency and **no message content** in logs.
 7. **(GATED — do last, after proxy proven)** Remove the old stack:
    - `compose.yml`: delete the `litellm` service + `LITELLM_UPSTREAM` env; add proxy build/run.
    - delete `config/litellm-config.yaml`, `scripts/claude-shim.js`.

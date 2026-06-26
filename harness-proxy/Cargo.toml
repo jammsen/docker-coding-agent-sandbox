@@ -16,6 +16,10 @@ serde_json = "1"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
 # ReceiverStream: bridges the spawned upstream-reader task to axum's SSE response body (Step 3).
 tokio-stream = "0.1"
+# Structured request logging to stderr; level from RUST_LOG (default info). Metadata only — never
+# bodies/prompts/auth (Step 6, PLAN.md §5d).
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [profile.release]
 # Small, static, single-purpose proxy — optimize for size and a clean FROM scratch image.
