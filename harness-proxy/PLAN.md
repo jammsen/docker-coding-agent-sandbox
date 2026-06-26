@@ -7,6 +7,24 @@ Branch: `feat/harness-proxy` (off `feat/webtty`).
 
 ---
 
+## 0. Current status (where a fresh session picks up)
+
+- ✅ **Step 1 done** (commits on `feat/harness-proxy`): Cargo crate + axum binary serving stub
+  `POST /v1/messages`, `POST /v1/messages/count_tokens`, `GET /health`. Multi-stage Dockerfile
+  (Ubuntu builder → static musl → `FROM scratch`) builds for the **native arch** (amd64/arm64 via
+  `TARGETARCH`); image is **~860 kB**, runs non-root. Hardened compose service `harness-proxy` added.
+  All three endpoints verified with `curl`.
+- **Toolchain decisions made:** edition **2024** (`rust-version 1.85`), **axum 0.8**, tokio 1,
+  serde_json 1. `reqwest`/`serde` **not added yet** (come in Step 2).
+- **Files that exist:** `harness-proxy/{Cargo.toml,Dockerfile,.dockerignore,src/main.rs}`.
+  `anthropic.rs` / `openai.rs` / `translate.rs` do **not** exist yet — create them in Step 2.
+- **Wiring:** proxy is NOT yet in Claude's path. Sandbox still uses litellm + `claude-shim.js`.
+  Compose runs the proxy standalone (`agentic-harness-proxy`, bind `0.0.0.0:4000`, no published
+  ports) so it doesn't interfere. Cutover is Step 6.
+- **➡️ Next: Step 2** — non-streaming Anthropic→OpenAI translation against real vLLM.
+
+---
+
 ## 1. What we're building and why
 
 Replace the **LiteLLM Python sidecar** + the **`claude-shim.js` Node proxy** with one
@@ -52,24 +70,26 @@ Everything except Step 5 below is independent of this answer. Do not wait — bu
 
 ## 3. Stack & build
 
-- Rust, **axum** + **tokio**. HTTP client: **reqwest with `rustls-tls`** (default features off,
-  `rustls-tls` on) → no OpenSSL, no dynamic glibc TLS dep. Upstream vLLM call is plain `http`, so
-  no outbound TLS is needed in practice, but rustls keeps the binary fully static.
-- Build the binary **statically** for the target arch: `--target x86_64-unknown-linux-musl --release`.
-  Static musl is what makes a `FROM scratch` final image actually work (no libc/loader at runtime).
+- Rust **edition 2024** (`rust-version 1.85`). **axum 0.8** + **tokio 1**, **serde_json 1**. Step 2
+  adds **reqwest with `rustls-tls`** (default features off, `rustls-tls` on) + **serde** derive.
+  Upstream vLLM call is plain `http`, so no outbound TLS is needed in practice, but rustls (not
+  OpenSSL) keeps the binary fully static.
+- Build the binary **statically** for the **native** arch — do NOT hardcode `x86_64`. The Dockerfile
+  maps BuildKit's `TARGETARCH` → musl triple (`amd64`→`x86_64-unknown-linux-musl`,
+  `arm64`→`aarch64-unknown-linux-musl`) and builds native. (Hardcoding x86_64 broke the arm64 dev
+  build with a `cc -m64` cross-link error.) Static musl is what makes `FROM scratch` work.
 - Single crate, single binary. **Do not** build a multi-crate workspace — YAGNI.
 
-### Image strategy — **no Alpine**. Chisel/Ubuntu builder → `FROM scratch` target
+### Image strategy — **no Alpine**. Ubuntu builder → `FROM scratch` target (DONE, see `harness-proxy/Dockerfile`)
 
-Two stages, both consistent with the repo (which already pins `ubuntu:26.04`):
+Two stages, both consistent with the repo (which already pins `ubuntu:26.04` by digest):
 
-1. **Builder stage = Ubuntu, NOT `rust:*-alpine`.** Compile on an Ubuntu base (matching the project's
-   `ubuntu:26.04`): install Rust via rustup, `rustup target add x86_64-unknown-linux-musl`,
-   `apt-get install musl-tools`, then `cargo build --release --target x86_64-unknown-linux-musl`.
-   The Alpine builder is explicitly rejected — we stay in the Ubuntu/Canonical toolchain.
-2. **Final stage = `FROM scratch`** containing only the static target-arch binary (`COPY --from=builder
-   …/harness-proxy /harness-proxy`). Because it's static musl + rustls over plain http, scratch needs
-   **nothing else** — no libc, no ca-certificates.
+1. **Builder stage = Ubuntu, NOT `rust:*-alpine`.** Compile on `ubuntu:26.04` (same pinned digest as
+   the repo): `apt-get install build-essential ca-certificates curl musl-tools`, rustup minimal,
+   `rustup target add <native musl triple>`, `cargo build --release --target <triple>`, then copy the
+   binary to a fixed `/harness-proxy` path. The Alpine builder is explicitly rejected.
+2. **Final stage = `FROM scratch`** with only the static binary, `USER 65532:65532`, `EXPOSE 4000`.
+   Static musl + plain http means scratch needs **nothing else** — no libc, no ca-certificates.
 
 **Fallback (only if a fully-static musl build proves impractical**, e.g. a transitive crate that won't
 build on musl): instead of `FROM scratch`, ship a **chiselled Ubuntu rootfs** built with **Chisel**
@@ -82,16 +102,19 @@ Suggested layout (keep it flat):
 ```
 harness-proxy/
   PLAN.md          # this file
-  Cargo.toml
-  Dockerfile       # multi-stage: ubuntu builder (musl) -> FROM scratch
+  Cargo.toml       # EXISTS (edition 2024, axum 0.8)
+  Dockerfile       # EXISTS — multi-stage: ubuntu builder (native musl) -> FROM scratch
+  .dockerignore    # EXISTS
   src/
-    main.rs        # axum router, config from env, listen 127.0.0.1:4000
-    anthropic.rs   # Anthropic request/response/SSE types (serde)
-    openai.rs      # OpenAI request/response/chunk types (serde)
-    translate.rs   # request: Anthropic->OpenAI (+image hoist, param strip, alias map)
-                   # response: OpenAI->Anthropic (non-stream + streaming SSE)
+    main.rs        # EXISTS — axum router, HARNESS_PROXY_BIND env, stub handlers
+    anthropic.rs   # TODO (Step 2) — Anthropic request/response/SSE types (serde)
+    openai.rs      # TODO (Step 2) — OpenAI request/response/chunk types (serde)
+    translate.rs   # TODO (Step 2) — request: Anthropic->OpenAI (+image hoist, param strip, alias map)
+                   #                  response: OpenAI->Anthropic (non-stream + streaming SSE)
 ```
-Split further only if a file gets unwieldy.
+Split further only if a file gets unwieldy. Note: the binary binds `HARNESS_PROXY_BIND`
+(default `0.0.0.0:4000` for the standalone container); the in-image final deploy can set
+`127.0.0.1:4000`.
 
 ---
 
@@ -157,10 +180,13 @@ per `tool_calls[].index`.
 
 ## 6. Step-by-step (each step independently testable)
 
-1. **Scaffold + Dockerfile.** Cargo bin, axum, env config, listen `127.0.0.1:4000`,
-   `POST /v1/messages` returns a hardcoded Anthropic non-stream response. Multi-stage musl→scratch
-   builds and runs. ✅ when `curl` to the container gets the dummy reply.
-2. **Non-streaming translation** against real vLLM (text only). ✅ real model answer round-trips.
+1. ✅ **DONE — Scaffold + Dockerfile.** Cargo bin, axum, `HARNESS_PROXY_BIND` env, stub
+   `POST /v1/messages` + `count_tokens` + `/health`. Multi-stage Ubuntu→scratch (native arch) builds,
+   runs non-root, ~860 kB. Verified via `curl`. Compose service `harness-proxy` added (hardened).
+2. **➡️ NEXT — Non-streaming translation** against real vLLM (text only). Add `reqwest`(rustls)+`serde`;
+   create `anthropic.rs`/`openai.rs`/`translate.rs`; replace the `/v1/messages` stub with a real
+   Anthropic→OpenAI request, POST to `${VLLM_URL}/v1/chat/completions`, translate the response back.
+   ✅ real model answer round-trips. Test in compose: the proxy reaches vLLM at `10.0.0.13:8000`.
 3. **Streaming SSE** (text only). ✅ Claude Code in the container streams a normal chat reply.
 4. **Image hoist + param strip + alias map + `count_tokens`.** ✅ Read-an-image flow works
    end-to-end (the thing LiteLLM broke).
