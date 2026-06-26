@@ -22,7 +22,7 @@ const overlay = `<div id="upload-overlay"><div id="upload-panel"><div id="upload
 const css = `<style>
 #upload-overlay{display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.55);}
 #upload-overlay.open{display:flex;align-items:center;justify-content:flex-end;}
-#upload-panel{position:relative;height:100%;width:480px;min-width:480px;background:#1a1d2e;border-left:1px solid #2d3148;display:flex;flex-direction:column;box-shadow:-8px 0 32px rgba(0,0,0,.7);}
+#upload-panel{position:relative;height:100%;width:min(480px,100vw);min-width:min(320px,100vw);background:#1a1d2e;border-left:1px solid #2d3148;display:flex;flex-direction:column;box-shadow:-8px 0 32px rgba(0,0,0,.7);}
 #upload-resize-handle{position:absolute;top:0;left:-8px;bottom:0;width:8px;cursor:ew-resize;z-index:10;}
 #upload-resize-handle:hover,#upload-resize-handle.dragging{background:rgba(129,140,248,.25);}
 #upload-panel-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid #2d3148;font-size:.85rem;color:#a5b4fc;font-weight:600;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;user-select:none;}
@@ -83,7 +83,7 @@ const js = `<script>(function(){
   function _rm(e) {
     var dx = _sx - e.clientX,
         maxW = Math.floor(window.innerWidth * 0.5),
-        minW = 480,
+        minW = Math.min(320, window.innerWidth),
         nw = Math.min(maxW, Math.max(minW, _sw + dx));
     pn.style.width = nw + "px";
   }

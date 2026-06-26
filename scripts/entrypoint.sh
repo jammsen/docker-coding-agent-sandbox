@@ -80,6 +80,7 @@ if [[ -f "$CLAUDE_CFG_SRC_SETTINGS" ]]; then
     install -m644 -o "$APP_USER" -g "$APP_GROUP" "$CLAUDE_CFG_SRC_SETTINGS" "$CLAUDE_DIR/settings.json"
     install -m644 -o "$APP_USER" -g "$APP_GROUP" "$CLAUDE_CFG_SRC_CLAUDE_MD" "$CLAUDE_DIR/CLAUDE.md"
     if [[ -d "$CLAUDE_CFG_SRC_AGENTS" ]]; then
+        rm -f "$CLAUDE_DIR/agents/"*.md 2>/dev/null || true
         find "$CLAUDE_CFG_SRC_AGENTS" -name '*.md' | while IFS= read -r f; do
             install -m644 -o "$APP_USER" -g "$APP_GROUP" "$f" "$CLAUDE_DIR/agents/$(basename "$f")"
         done
@@ -140,9 +141,12 @@ export AVAILABLE_TOOLS_ENV="${AVAILABLE_TOOLS[*]}"
 # _supervise <name> <restart_delay_s> <cmd...>  — restarts cmd on crash without touching wetty/sessions.
 _supervise() {
     local name="$1" delay="$2"; shift 2
+    local _rc=0
     while true; do
-        "$@"
-        echo "> [Supervisor] $name exited (exit $?) — restarting in ${delay} s" >&2
+        # || _rc=$? keeps set -e from exiting the subshell when the sidecar crashes.
+        "$@" || _rc=$?
+        echo "> [Supervisor] $name exited (exit ${_rc}) — restarting in ${delay} s" >&2
+        _rc=0
         sleep "$delay"
     done
 }

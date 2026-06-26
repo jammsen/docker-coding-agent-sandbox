@@ -19,16 +19,19 @@ RED='\033[0;31m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
+FAILED=0
+
 pass() { echo -e "${GREEN}PASS${NC} $*"; }
-fail() { echo -e "${RED}FAIL${NC} $*"; }
+fail() { echo -e "${RED}FAIL${NC} $*"; FAILED=$((FAILED + 1)); }
 info() { echo -e "${YELLOW}    ${NC} $*"; }
 
 run_curl() {
     docker exec "$CONTAINER" curl -s --max-time 10 "$@"
 }
 
+# -i passes stdin through so piped JSON reaches python3 inside the container.
 run_python3() {
-    docker exec "$CONTAINER" python3 "$@"
+    docker exec -i "$CONTAINER" python3 "$@"
 }
 
 echo "=== SearXNG health check ==="
@@ -99,3 +102,5 @@ print(f\"    url   : {r.get('url','')}\")
 search_test "3/5" "docker compose networking"  "general"
 search_test "4/5" "linux kernel release 2025"  "news"
 search_test "5/5" "python asyncio tutorial"    "it"
+
+exit "$FAILED"

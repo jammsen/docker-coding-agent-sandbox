@@ -185,48 +185,73 @@ function handleRequest(req, res) {
       return json(res, 413, { error: 'File too large (max 50 MB)' });
     }
 
-    const chunks = [];
+    // Stream directly to a temp file — avoids holding 2× file size in RAM
+    // when multiple concurrent uploads arrive in parallel.
+    const rand    = Math.floor(Math.random() * 0x10000).toString(16).padStart(4, '0');
+    const tmpPath = path.join(UPLOAD_DIR, `.tmp-${timestamp()}-${rand}`);
+    const ws      = fs.createWriteStream(tmpPath);
+
     let received = 0;
+    let ext      = null; // set from magic bytes on first chunk; '' means check failed
     // Guard: ensure only one response is ever sent regardless of event ordering.
-    // req.destroy() (oversize path) can trigger 'error' immediately after 'data',
+    // req.destroy() can trigger 'error' immediately after 'data',
     // and a client abort can fire 'error' after 'end' — both would double-write.
     let responded = false;
     const respond = (code, body) => { if (responded) return; responded = true; json(res, code, body); };
+    const cleanup = () => { try { fs.unlinkSync(tmpPath); } catch { /* already gone */ } };
 
     req.on('data', chunk => {
       received += chunk.length;
       if (received > MAX_BYTES) {
+        ws.destroy();
+        cleanup();
         // Send 413 before tearing down so the client gets an error body, not a TCP reset.
         respond(413, { error: 'File too large (max 50 MB)' });
         req.destroy();
         return;
       }
-      chunks.push(chunk);
+      if (ext === null) {
+        ext = imageExt(chunk) || '';
+        if (!ext) {
+          ws.destroy();
+          cleanup();
+          respond(400, { error: 'Not a valid image — PNG, JPEG, GIF or WEBP only' });
+          req.destroy();
+          return;
+        }
+      }
+      if (!responded) ws.write(chunk);
     });
 
     req.on('end', () => {
       if (responded) return;
-      const buf = Buffer.concat(chunks);
-      const ext = imageExt(buf);
-      if (!ext) {
-        return respond(400, { error: 'Not a valid image — PNG, JPEG, GIF or WEBP only' });
-      }
-
-      // Append a 4-hex random suffix to survive same-second concurrent uploads.
-      const rand = Math.floor(Math.random() * 0x10000).toString(16).padStart(4, '0');
-      const dest = path.join(UPLOAD_DIR, `${timestamp()}-${rand}.${ext}`);
-      try {
-        fs.writeFileSync(dest, buf, { flag: 'wx' }); // wx = fail if file already exists
-      } catch (err) {
-        console.error('[upload-server] write error:', err.message);
-        return respond(500, { error: 'Failed to save file' });
-      }
-
-      console.log(`[upload-server] saved: ${dest}`);
-      return respond(200, { path: dest });
+      ws.end(() => {
+        if (responded) { cleanup(); return; }
+        if (!ext) {
+          cleanup();
+          return respond(400, { error: 'Not a valid image — PNG, JPEG, GIF or WEBP only' });
+        }
+        // Append a 4-hex random suffix to survive same-second concurrent uploads.
+        const dest = path.join(UPLOAD_DIR, `${timestamp()}-${rand}.${ext}`);
+        try {
+          fs.renameSync(tmpPath, dest);
+        } catch (err) {
+          cleanup();
+          console.error('[upload-server] rename error:', err.message);
+          return respond(500, { error: 'Failed to save file' });
+        }
+        console.log(`[upload-server] saved: ${dest}`);
+        respond(200, { path: dest });
+      });
     });
 
-    req.on('error', () => respond(400, { error: 'Request stream error' }));
+    req.on('error', () => { ws.destroy(); cleanup(); respond(400, { error: 'Request stream error' }); });
+    ws.on('error', (err) => {
+      console.error('[upload-server] write error:', err.message);
+      cleanup();
+      respond(500, { error: 'Failed to save file' });
+      req.destroy();
+    });
     return;
   }
 

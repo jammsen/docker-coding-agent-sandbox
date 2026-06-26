@@ -139,12 +139,19 @@ function renderQueue() {
 
     // Click thumbnail to preview in modal
     if (item.preview) {
-      thumb.addEventListener('click', () => openModal({
+      thumb.setAttribute('tabindex', '0');
+      thumb.setAttribute('role', 'button');
+      thumb.setAttribute('aria-label', 'Preview ' + item.file.name);
+      const openThumbModal = () => openModal({
         src:  item.preview,
         name: item.file.name,
         size: item.file.size,
         path: item.path || null,
-      }));
+      });
+      thumb.addEventListener('click', openThumbModal);
+      thumb.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openThumbModal(); }
+      });
     } else {
       thumb.style.cursor = 'default';
     }
@@ -387,19 +394,26 @@ function renderGallery(images) {
   images.forEach(item => {
     const div = document.createElement('div');
     div.className = 'thumb';
+    div.setAttribute('tabindex', '0');
+    div.setAttribute('role', 'button');
+    div.setAttribute('aria-label', 'Preview ' + item.filename);
     const img = document.createElement('img');
     img.src     = '/image/' + encodeURIComponent(item.filename);
     img.alt     = item.filename;
     img.loading = 'lazy';
     div.appendChild(img);
-    div.addEventListener('click', () => openModal({
+    const openGalleryModal = () => openModal({
       src:      '/image/' + encodeURIComponent(item.filename),
       name:     item.filename,
       size:     item.size,
       path:     item.path,
       isGallery: true,
       filename:  item.filename,
-    }));
+    });
+    div.addEventListener('click', openGalleryModal);
+    div.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openGalleryModal(); }
+    });
     galleryGrid.appendChild(div);
   });
 }

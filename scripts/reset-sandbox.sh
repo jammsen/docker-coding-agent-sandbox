@@ -51,9 +51,8 @@ This will delete all generated OpenCode sandbox state under:
   $ROOT_DIR/workspace/
   $ROOT_DIR/data/
 
-Only these placeholder files will be preserved:
-  $ROOT_DIR/workspace/.gitkeep
-  $ROOT_DIR/data/.gitkeep
+All .gitkeep placeholder files will be preserved (e.g. workspace/.gitkeep,
+  data/.gitkeep, workspace/uploads/.gitkeep, and any other nested .gitkeep files).
 
 As this is a destructive operation, this cannot be undone!
 EOF

@@ -388,6 +388,8 @@ The container starts as root to handle setup (creating the user, fixing file own
 - Writable filesystem access is limited to `./workspace` and `./data` on the host. Config, commands, skills, and auth are mounted read-only.
 - **`agent-task` preserves the privilege drop** — a plain `docker exec agentic-harness-sandbox claude ...` would run Claude as **root**, since the container's entrypoint runs as root and `exec` inherits that user. The `agent-task` wrapper instead re-execs itself under `gosu agent` before launching Claude — the same drop path browser sessions use — so one-shot tasks can never run with more privilege than an interactive session. With `no-new-privileges` + `cap_drop: ALL` in force, there is no path back to root afterwards.
 
+**Port 1112 (image upload) assumes a trusted audience.** The upload server exposes unauthenticated list, upload, and delete operations — intentionally, to avoid requiring a separate login for every browser tab. This is a conscious tradeoff for the homelab/sandbox use case where the operator and user are the same trusted person. If you expose port 1112 to a wider network, anyone who can reach it can enumerate workspace paths, upload arbitrary files, and delete uploads. In that case, put a reverse proxy with authentication in front, or remove the port mapping from `compose.yml` entirely and access the upload page through a tunnel.
+
 The model runs entirely on your local vLLM server. No data leaves your network.
 
 ## Included Software

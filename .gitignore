@@ -1,4 +1,5 @@
 data/*
+!data/.gitkeep
 test-data/*
 !data/opencode/
 !data/claude/
@@ -8,6 +9,7 @@ data/claude/*
 !data/claude/.gitkeep
 
 workspace/*
+!workspace/.gitkeep
 !workspace/.mcp.json
 !workspace/uploads/
 workspace/uploads/*

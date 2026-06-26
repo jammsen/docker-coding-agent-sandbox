@@ -11,7 +11,6 @@
 
 const fs   = require('fs');
 const http = require('http');
-const path = require('path');
 
 const imagePath = process.argv[2];
 if (!imagePath) {
@@ -28,13 +27,15 @@ if (!VLLM_URL) {
 const MODEL              = process.env.VLLM_MODEL            || 'qwen3.6-35b';
 const REQUEST_TIMEOUT_MS = parseInt(process.env.VLLM_REQUEST_TIMEOUT_MS || '300000', 10); // 5 min
 
-const MIME_MAP = {
-  png:  'image/png',
-  jpg:  'image/jpeg',
-  jpeg: 'image/jpeg',
-  gif:  'image/gif',
-  webp: 'image/webp',
-};
+function mimeFromMagic(buf) {
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return 'image/png';
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff)                    return 'image/jpeg';
+  if (buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46)                    return 'image/gif';
+  if (buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 &&
+      buf.length > 11 &&
+      buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50) return 'image/webp';
+  return null;
+}
 
 let imageData;
 try {
@@ -44,8 +45,11 @@ try {
   process.exit(1);
 }
 
-const ext  = path.extname(imagePath).slice(1).toLowerCase();
-const mime = MIME_MAP[ext] || 'image/png';
+const mime = mimeFromMagic(imageData);
+if (!mime) {
+  process.stderr.write('Error: ' + imagePath + ' is not a valid PNG, JPEG, GIF, or WEBP image.\n');
+  process.exit(1);
+}
 const dataUrl = 'data:' + mime + ';base64,' + imageData.toString('base64');
 
 const payload = JSON.stringify({
@@ -60,7 +64,8 @@ const payload = JSON.stringify({
   max_tokens: 2048,
 });
 
-const upstreamUrl = new URL(VLLM_URL + '/chat/completions');
+const base = VLLM_URL.endsWith('/') ? VLLM_URL : VLLM_URL + '/';
+const upstreamUrl = new URL('chat/completions', base);
 const options = {
   hostname: upstreamUrl.hostname,
   port:     parseInt(upstreamUrl.port || '80', 10),
