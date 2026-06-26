@@ -18,6 +18,7 @@ services:
       - CLAUDE_CODE_NO_FLICKER=1                # prevents Claude Code from using alt-screen tricks that break scroll in WeTTY
       - LITELLM_UPSTREAM=http://agentic-litellm:4000   # upstream for claude-shim.js (Claude image-rewrite proxy on 127.0.0.1:4001)
       - SEARXNG_URL=http://searxng:8080              # used by OMP's built-in web search (providers.webSearch=searxng) and mcp-searxng
+      - VLLM_URL=${VLLM_URL:-http://10.0.0.13:8000/v1} # vLLM API base incl. /v1 — override by setting VLLM_URL in your shell before compose up
     init: true                                  # tini as PID 1 — reaps zombie child processes
     restart: unless-stopped                     # auto-restart on failure or host reboot
     read_only: false                            # opencode writes session state
@@ -62,7 +63,7 @@ services:
     # but can still reach your vLLM server via host IP
 
   searxng:
-    image: docker.io/searxng/searxng:latest
+    image: docker.io/searxng/searxng:2026.6.26-f8ffbf36f
     container_name: agentic-searxng
     restart: unless-stopped
     volumes:
@@ -95,6 +96,7 @@ services:
       - LITELLM_LOG=INFO                          # full request/response logging with DEBUG, less verbose with INFO, WARNING, ERROR, CRITICAL
       - LITELLM_FORCE_CHAT_COMPLETION=true        # force /v1/chat/completions
       - LITELLM_USE_RESPONSES_API=false           # Disable responses API path entirely
+      - VLLM_URL=${VLLM_URL:-http://10.0.0.13:8000/v1} # passed to litellm-config.yaml via os.environ/VLLM_URL
     extra_hosts:
       - "host.docker.internal:host-gateway"
     # No published ports — the sandbox reaches this proxy over the internal docker network

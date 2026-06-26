@@ -20,8 +20,13 @@ if (!imagePath) {
 }
 const userPrompt = process.argv[3] || 'Describe this image in detail. What do you see?';
 
-const VLLM_BASE = process.env.VLLM_URL   || 'http://10.0.0.13:8000';
-const MODEL     = process.env.VLLM_MODEL || 'qwen3.6-35b';
+const VLLM_URL = process.env.VLLM_URL;
+if (!VLLM_URL) {
+  process.stderr.write('Error: VLLM_URL is not set. Set it in compose.yml, e.g. VLLM_URL=http://host:8000/v1\n');
+  process.exit(1);
+}
+const MODEL              = process.env.VLLM_MODEL            || 'qwen3.6-35b';
+const REQUEST_TIMEOUT_MS = parseInt(process.env.VLLM_REQUEST_TIMEOUT_MS || '300000', 10); // 5 min
 
 const MIME_MAP = {
   png:  'image/png',
@@ -55,7 +60,7 @@ const payload = JSON.stringify({
   max_tokens: 2048,
 });
 
-const upstreamUrl = new URL(VLLM_BASE + '/v1/chat/completions');
+const upstreamUrl = new URL(VLLM_URL + '/chat/completions');
 const options = {
   hostname: upstreamUrl.hostname,
   port:     parseInt(upstreamUrl.port || '80', 10),
@@ -90,6 +95,10 @@ const req = http.request(options, (res) => {
       process.exit(1);
     }
   });
+});
+
+req.setTimeout(REQUEST_TIMEOUT_MS, () => {
+  req.destroy(new Error(`request timeout after ${REQUEST_TIMEOUT_MS}ms`));
 });
 
 req.on('error', (e) => {

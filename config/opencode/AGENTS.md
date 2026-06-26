@@ -50,7 +50,7 @@ Port **3000** is the externally reachable port for agent-hosted servers. Port 11
 **Always check before starting a server** — do not blindly launch a new process:
 
 ```bash
-ss -tlnp | grep 1111
+ss -tlnp | grep 3000
 ```
 
 If something is already listening, do not start another instance. If the port is free, start the server with `nohup` so it survives the current shell invocation:
@@ -68,7 +68,7 @@ kill $(cat /tmp/server.pid) 2>/dev/null || true
 After killing, verify the port is free before proceeding:
 
 ```bash
-ss -tlnp | grep 1111 || echo "Port 1111 is free"
+ss -tlnp | grep 3000 || echo "Port 3000 is free"
 ```
 
 **Never use `lsof -i :<port>` to find or kill processes** — `lsof` network socket inspection hangs in this container due to capability restrictions. Always use the PID file to kill, and `ss` to verify.

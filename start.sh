@@ -25,7 +25,7 @@ done
 docker compose build "${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"}"
 
 # Stop any existing container before starting fresh
-if docker ps -q --filter "name=agentic-harness-sandbox" | grep -q .; then
+if docker ps -aq --filter "name=agentic-harness-sandbox" | grep -q .; then
     echo "> Stopping existing sandbox container..."
     docker compose down
 fi

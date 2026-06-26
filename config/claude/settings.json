@@ -10,10 +10,11 @@
     "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-4-5",
     "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-sonnet-4-5",
     "ANTHROPIC_DEFAULT_FABLE_MODEL": "claude-sonnet-4-5",
-    "MAX_THINKING_TOKENS": "0",
+    "MAX_THINKING_TOKENS": "8000",
     "CLAUDE_CODE_SKIP_WEB_FETCH_PREFLIGHT": "1"
   },
-  "alwaysThinkingEnabled": false,
+  "alwaysThinkingEnabled": true,
+  "verbose": true,
   "autoUpdatesChannel": "stable",
   "permissions": {
     "defaultMode": "acceptEdits",

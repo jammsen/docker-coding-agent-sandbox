@@ -15,10 +15,12 @@
 // Pure Node stdlib (no deps), matching upload-server.js. Listens on 127.0.0.1:SHIM_PORT and
 // forwards to LITELLM_UPSTREAM (default http://agentic-litellm:4000).
 
-const http = require('http');
+const http  = require('http');
+const https = require('https');
 const { URL } = require('url');
 
-const SHIM_PORT = parseInt(process.env.CLAUDE_SHIM_PORT || '4001', 10);
+const SHIM_PORT          = parseInt(process.env.CLAUDE_SHIM_PORT    || '4001',   10);
+const UPSTREAM_TIMEOUT_MS = parseInt(process.env.UPSTREAM_TIMEOUT_MS || '600000', 10); // 10 min — LLM inference is slow
 const UPSTREAM = new URL(process.env.LITELLM_UPSTREAM || 'http://agentic-litellm:4000');
 
 // --- the rewrite ---------------------------------------------------------
@@ -81,13 +83,15 @@ const server = http.createServer((req, res) => {
     if (outBody.length || req.method === 'POST') headers['content-length'] = Buffer.byteLength(outBody);
     delete headers['transfer-encoding'];
 
-    const upstreamReq = http.request(
+    const transport = UPSTREAM.protocol === 'https:' ? https : http;
+    const defaultPort = UPSTREAM.protocol === 'https:' ? 443 : 80;
+    let timedOut = false;
+    const upstreamReq = transport.request(
       {
-        protocol: UPSTREAM.protocol,
         hostname: UPSTREAM.hostname,
-        port: UPSTREAM.port || 80,
-        method: req.method,
-        path: req.url,
+        port:     parseInt(UPSTREAM.port || defaultPort, 10),
+        method:   req.method,
+        path:     req.url,
         headers,
       },
       (upstreamRes) => {
@@ -95,9 +99,19 @@ const server = http.createServer((req, res) => {
         upstreamRes.pipe(res); // streams SSE transparently
       }
     );
+    upstreamReq.setTimeout(UPSTREAM_TIMEOUT_MS, () => {
+      timedOut = true;
+      upstreamReq.destroy();
+    });
     upstreamReq.on('error', (err) => {
-      res.writeHead(502, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ error: { type: 'shim_upstream_error', message: String(err) } }));
+      if (res.headersSent) { res.end(); return; }
+      if (timedOut) {
+        res.writeHead(504, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: { type: 'shim_upstream_timeout', message: `upstream did not respond within ${UPSTREAM_TIMEOUT_MS}ms` } }));
+      } else {
+        res.writeHead(502, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: { type: 'shim_upstream_error', message: String(err) } }));
+      }
     });
     if (outBody.length) upstreamReq.write(outBody);
     upstreamReq.end();

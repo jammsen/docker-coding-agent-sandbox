@@ -127,7 +127,8 @@ function handleRequest(req, res) {
   // Serve an uploaded image by filename (thumbnails + modal)
   const imgServeMatch = req.url.match(/^\/image\/([^?#]+)$/);
   if (req.method === 'GET' && imgServeMatch) {
-    const rawName = decodeURIComponent(imgServeMatch[1]);
+    let rawName;
+    try { rawName = decodeURIComponent(imgServeMatch[1]); } catch { res.writeHead(400); return res.end(); }
     // Strict allow-list: no path separators or traversal — spaces and parens are fine
     if (!isValidImageName(rawName)) {
       res.writeHead(400); return res.end();
@@ -143,7 +144,13 @@ function handleRequest(req, res) {
         'Cache-Control': 'max-age=3600, immutable',
         'X-Content-Type-Options': 'nosniff',
       });
-      fs.createReadStream(filePath).pipe(res);
+      const stream = fs.createReadStream(filePath);
+      stream.on('error', (err) => {
+        // Headers already sent — can't change status; just close the response cleanly.
+        console.error('[upload-server] read error:', err.message);
+        res.end();
+      });
+      stream.pipe(res);
     } catch {
       res.writeHead(404); return res.end();
     }
@@ -152,7 +159,8 @@ function handleRequest(req, res) {
 
   // Delete an uploaded image
   if (req.method === 'DELETE' && imgServeMatch) {
-    const rawName = decodeURIComponent(imgServeMatch[1]);
+    let rawName;
+    try { rawName = decodeURIComponent(imgServeMatch[1]); } catch { res.writeHead(400); return res.end(); }
     if (!isValidImageName(rawName)) {
       res.writeHead(400); return res.end();
     }
@@ -221,23 +229,22 @@ function handleRequest(req, res) {
 }
 
 // ---------------------------------------------------------------------------
-// Start server — HTTPS if certs exist (reuses wetty's self-signed cert),
-// falls back to plain HTTP so the server always starts.
+// Start server — HTTPS only (reuses wetty's self-signed cert).
+// HTTP fallback is intentionally absent: the clipboard API and the WeTTY
+// iframe embed both require a secure context. Failing loudly is safer than
+// silently serving a broken page over HTTP.
 // ---------------------------------------------------------------------------
 
-let server;
-if (fs.existsSync(SSL_KEY) && fs.existsSync(SSL_CERT)) {
-  const tlsOpts = {
-    key:  fs.readFileSync(SSL_KEY),
-    cert: fs.readFileSync(SSL_CERT),
-  };
-  server = https.createServer(tlsOpts, handleRequest);
-  server.listen(PORT, '0.0.0.0', () =>
-    console.log(`[upload-server] HTTPS on port ${PORT}, saving to ${UPLOAD_DIR}`)
-  );
-} else {
-  server = http.createServer(handleRequest);
-  server.listen(PORT, '0.0.0.0', () =>
-    console.log(`[upload-server] HTTP on port ${PORT}, saving to ${UPLOAD_DIR}`)
-  );
+if (!fs.existsSync(SSL_KEY) || !fs.existsSync(SSL_CERT)) {
+  console.error(`[upload-server] TLS cert not found at ${SSL_KEY} / ${SSL_CERT} — cannot start.`);
+  console.error('[upload-server] The upload page requires HTTPS for clipboard access and iframe embedding.');
+  process.exit(1);
 }
+
+const server = https.createServer(
+  { key: fs.readFileSync(SSL_KEY), cert: fs.readFileSync(SSL_CERT) },
+  handleRequest
+);
+server.listen(PORT, '0.0.0.0', () =>
+  console.log(`[upload-server] HTTPS on port ${PORT}, saving to ${UPLOAD_DIR}`)
+);

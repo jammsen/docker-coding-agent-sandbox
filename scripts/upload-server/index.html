@@ -11,7 +11,7 @@
   <h1>Image Upload</h1>
   <p class="subtitle">Upload images, then paste the paths into your agent terminal.</p>
 
-  <div class="drop-zone" id="dropZone">
+  <div class="drop-zone" id="dropZone" role="button" tabindex="0" aria-label="Click to browse or drag and drop images here">
     <div class="drop-icon">🖼</div>
     <div class="drop-label"><strong>Click to browse</strong> or drag &amp; drop here</div>
     <div class="drop-hint">PNG &middot; JPEG &middot; GIF &middot; WEBP &mdash; max 50 MB each &middot; select multiple</div>
@@ -47,7 +47,7 @@
   <div class="modal-backdrop" id="modalBackdrop"></div>
   <div class="modal-box">
     <button id="btnModalClose">&#x2715;</button>
-    <img id="modalImg" src="" alt="">
+    <img id="modalImg" alt="">
     <div class="modal-name" id="modalName"></div>
 
     <div id="modalPathRow" class="result-row" style="display:none">

@@ -26,7 +26,7 @@ A companion **image upload page** runs on `https://<host>:1112`. Paste a screens
     - [Uploading screenshots and images](#uploading-screenshots-and-images)
     - [Image analysis with Claude Code](#image-analysis-with-claude-code)
     - [Running one-shot tasks (headless)](#running-one-shot-tasks-headless)
-    - [Modes (OpenCode)](#modes-opencode)
+    - [Modes (OpenCode)](#modes-and-initial-token-overhead)
     - [Context window awareness](#context-window-awareness)
   - [Troubleshooting](#troubleshooting)
   - [Security Notes](#security-notes)
@@ -45,10 +45,26 @@ A companion **image upload page** runs on `https://<host>:1112`. Paste a screens
 
 > **How this works:** The agent tools running inside the container are clients to your external vLLM server. They have no direct access to the model weights — all inference goes through the API endpoint. If a tool ever needs to identify which model it is using, it must look it up via the API or a web search based on the model ID configured in `config/opencode/opencode.json` / `config/omp/models.yml`.
 
+### Configuring your vLLM address
+
+All services that talk to vLLM read their endpoint from the `VLLM_URL` environment variable. The default in `compose.yml` is `http://10.0.0.13:8000/v1` — change it to match your setup by setting the variable in your shell before running any compose command:
+
+```bash
+export VLLM_URL=http://<your-vllm-ip>:8000/v1
+```
+
+Or set it inline for a one-off run:
+
+```bash
+VLLM_URL=http://192.168.1.50:8000/v1 ./start.sh
+```
+
+`VLLM_URL` must include the `/v1` path. It is passed automatically to both the `sandbox` and `litellm` services — you only need to set it in one place.
+
 Verify your vLLM is reachable before starting:
 
 ```bash
-curl http://10.0.0.13:8000/v1/models
+curl $VLLM_URL/models
 ```
 
 You should see your model ID in the response (e.g. `qwen3.6-35b`).
@@ -110,6 +126,9 @@ docker-agentic-harness-sandbox/
 ```bash
 # Get the code
 git clone git@github.com:jammsen/docker-agentic-harness-sandbox.git
+
+# Point the stack at your vLLM server (default: http://10.0.0.13:8000/v1)
+export VLLM_URL=http://<your-vllm-ip>:8000/v1
 
 # Build and start in the background
 ./start.sh

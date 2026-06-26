@@ -8,7 +8,9 @@ const fs = require('fs');
 const FILE = '/usr/local/lib/node_modules/wetty/build/server/socketServer/security.js';
 
 const src = fs.readFileSync(FILE, 'utf8');
-if (src.includes('frameSrc')) {
+// Check for the specific string we inject, not just any frameSrc — a future WeTTY
+// version adding its own frameSrc rule would otherwise silently skip our :1112 allow-rule.
+if (src.includes('hostname}:1112')) {
   console.log('wetty-csp: already patched, skipping');
   process.exit(0);
 }

@@ -4,9 +4,10 @@
 # Run from the host:
 #   ./scripts/test-searxng.sh
 #
-# SearXNG has no published ports (internal-only). All curl calls are executed
-# inside the sandbox container, which shares the Docker network with SearXNG
-# and can reach it at http://searxng:8080.
+# SearXNG has no published ports (internal-only). All curl and python3 calls are
+# executed inside the sandbox container, which shares the Docker network with
+# SearXNG and can reach it at http://searxng:8080. The only host-side dependency
+# is docker itself.
 
 set -euo pipefail
 
@@ -24,6 +25,10 @@ info() { echo -e "${YELLOW}    ${NC} $*"; }
 
 run_curl() {
     docker exec "$CONTAINER" curl -s --max-time 10 "$@"
+}
+
+run_python3() {
+    docker exec "$CONTAINER" python3 "$@"
 }
 
 echo "=== SearXNG health check ==="
@@ -46,7 +51,7 @@ echo
 # JSON and pull out a few enabled engine names as a sanity check.
 echo "[2/3] GET /config — instance configuration"
 config=$(run_curl "${BASE}/config")
-engines=$(echo "$config" | python3 -c "
+engines=$(echo "$config" | run_python3 -c "
 import sys, json
 d = json.load(sys.stdin)
 names = [e['name'] for e in d.get('engines', []) if e.get('enabled')][:5]
@@ -68,8 +73,8 @@ search_test() {
     local num="$1" query="$2" category="$3"
     echo "[${num}] search: '${query}' (category: ${category})"
     local response result_count
-    response=$(run_curl "${BASE}/search?q=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "${query}")&format=json&categories=${category}")
-    result_count=$(echo "$response" | python3 -c "
+    response=$(run_curl "${BASE}/search?q=$(run_python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "${query}")&format=json&categories=${category}")
+    result_count=$(echo "$response" | run_python3 -c "
 import sys, json
 d = json.load(sys.stdin)
 print(len(d.get('results', [])))
@@ -77,7 +82,7 @@ print(len(d.get('results', [])))
 
     if [[ "$result_count" -gt 0 ]]; then
         pass "got ${result_count} results"
-        echo "$response" | python3 -c "
+        echo "$response" | run_python3 -c "
 import sys, json
 d = json.load(sys.stdin)
 r = d['results'][0]

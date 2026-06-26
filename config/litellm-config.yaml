@@ -13,7 +13,7 @@ model_list:
   - model_name: claude-sonnet-4-5
     litellm_params:
       model: hosted_vllm/qwen3.6-35b
-      api_base: http://10.0.0.13:8000/v1
+      api_base: "os.environ/VLLM_URL"
       api_key: dummy
     model_info:
       supports_vision: true
@@ -21,7 +21,7 @@ model_list:
   - model_name: claude-haiku-4-5
     litellm_params:
       model: hosted_vllm/qwen3.6-35b
-      api_base: http://10.0.0.13:8000/v1
+      api_base: "os.environ/VLLM_URL"
       api_key: dummy
     model_info:
       supports_vision: true

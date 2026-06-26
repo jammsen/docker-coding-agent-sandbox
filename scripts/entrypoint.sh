@@ -25,6 +25,10 @@ if ! [[ "${PUID:-}" =~ ^[1-9][0-9]*$ ]] || ! [[ "${PGID:-}" =~ ^[1-9][0-9]*$ ]];
     exit 1
 fi
 
+# Preflight — fail fast with a clear message rather than letting services start
+# and fail mysteriously at inference time.
+: "${VLLM_URL:?VLLM_URL is not set. Add it to compose.yml, e.g. VLLM_URL=http://<host>:8000/v1}"
+
 NEEDS_CHOWN=false
 
 if [[ -z "$CURRENT_GID" ]]; then

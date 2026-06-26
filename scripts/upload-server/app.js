@@ -67,20 +67,22 @@ function addFiles(fileList) {
     queue.push(item);
     added++;
     if (!oversized) {
-      const reader = new FileReader();
-      reader.onload = e => { item.preview = e.target.result; renderQueue(); };
-      reader.readAsDataURL(file);
+      // createObjectURL is a cheap pointer into the browser's file cache — no base64 copy in JS memory.
+      item.preview = URL.createObjectURL(file);
     }
   });
   if (added) renderQueue();
 }
 
 function removeFromQueue(id) {
+  const item = queue.find(i => i.id === id);
+  if (item && item.preview) URL.revokeObjectURL(item.preview);
   queue = queue.filter(i => i.id !== id);
   renderQueue();
 }
 
 function clearAll() {
+  queue.forEach(item => { if (item.preview) URL.revokeObjectURL(item.preview); });
   queue = [];
   renderQueue();
 }
@@ -244,6 +246,9 @@ async function doUpload() {
 // --- Drop zone & file input events ---
 
 dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); }
+});
 
 fileInput.addEventListener('change', () => {
   if (fileInput.files.length) addFiles(fileInput.files);
