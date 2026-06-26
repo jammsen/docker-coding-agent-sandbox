@@ -33,8 +33,9 @@ async fn main() {
     // Standalone container binds 0.0.0.0:4000 (network-reachable, like the old litellm service);
     // the in-image final deploy can override to 127.0.0.1:4000.
     let bind = env::var("HARNESS_PROXY_BIND").unwrap_or_else(|_| "0.0.0.0:4000".to_string());
-    let vllm_url = env::var("VLLM_URL").unwrap_or_else(|_| "http://10.0.0.13:8000".to_string());
-    let vllm_model = env::var("VLLM_MODEL").unwrap_or_else(|_| "qwen3.6-35b".to_string());
+    // Deployment-specific — required, never baked into the binary (set via compose). Fail fast.
+    let vllm_url = require_env("VLLM_URL");
+    let vllm_model = require_env("VLLM_MODEL");
     let vllm_url = vllm_url.trim_end_matches('/').to_string();
 
     let state = AppState {
@@ -54,6 +55,10 @@ async fn main() {
         .unwrap_or_else(|e| panic!("harness-proxy: cannot bind {bind}: {e}"));
     eprintln!("> harness-proxy listening on {bind} -> vLLM {vllm_url} (model {vllm_model})");
     axum::serve(listener, app).await.expect("server error");
+}
+
+fn require_env(key: &str) -> String {
+    env::var(key).unwrap_or_else(|_| panic!("harness-proxy: {key} must be set"))
 }
 
 /// POST /v1/messages — translate Anthropic request, call vLLM, translate the response back.
