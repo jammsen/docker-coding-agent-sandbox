@@ -187,12 +187,17 @@ function handleRequest(req, res) {
 
     const chunks = [];
     let received = 0;
+    // Guard: ensure only one response is ever sent regardless of event ordering.
+    // req.destroy() (oversize path) can trigger 'error' immediately after 'data',
+    // and a client abort can fire 'error' after 'end' — both would double-write.
+    let responded = false;
+    const respond = (code, body) => { if (responded) return; responded = true; json(res, code, body); };
 
     req.on('data', chunk => {
       received += chunk.length;
       if (received > MAX_BYTES) {
         // Send 413 before tearing down so the client gets an error body, not a TCP reset.
-        json(res, 413, { error: 'File too large (max 50 MB)' });
+        respond(413, { error: 'File too large (max 50 MB)' });
         req.destroy();
         return;
       }
@@ -200,10 +205,11 @@ function handleRequest(req, res) {
     });
 
     req.on('end', () => {
+      if (responded) return;
       const buf = Buffer.concat(chunks);
       const ext = imageExt(buf);
       if (!ext) {
-        return json(res, 400, { error: 'Not a valid image — PNG, JPEG, GIF or WEBP only' });
+        return respond(400, { error: 'Not a valid image — PNG, JPEG, GIF or WEBP only' });
       }
 
       // Append a 4-hex random suffix to survive same-second concurrent uploads.
@@ -213,14 +219,14 @@ function handleRequest(req, res) {
         fs.writeFileSync(dest, buf, { flag: 'wx' }); // wx = fail if file already exists
       } catch (err) {
         console.error('[upload-server] write error:', err.message);
-        return json(res, 500, { error: 'Failed to save file' });
+        return respond(500, { error: 'Failed to save file' });
       }
 
       console.log(`[upload-server] saved: ${dest}`);
-      return json(res, 200, { path: dest });
+      return respond(200, { path: dest });
     });
 
-    req.on('error', () => json(res, 400, { error: 'Request stream error' }));
+    req.on('error', () => respond(400, { error: 'Request stream error' }));
     return;
   }
 
