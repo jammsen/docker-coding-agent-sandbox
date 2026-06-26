@@ -27,10 +27,41 @@ Branch: `feat/harness-proxy` (off `feat/webtty`).
   serde_json 1, **reqwest 0.12** (rustls-tls + json, default-features off), **serde 1** (derive).
 - **Files that exist:** `harness-proxy/{Cargo.toml,Dockerfile,.dockerignore,src/main.rs,
   src/anthropic.rs,src/openai.rs,src/translate.rs}`.
+- ✅ **Step 3 done**: streaming SSE translation (text only). New `src/stream.rs`; `reqwest` gains the
+  `stream` feature, added `tokio-stream` (ReceiverStream → axum `Sse` body). `/v1/messages` branches
+  on `"stream":true`; a spawned task reads vLLM chunks (line-buffered across boundaries) and emits the
+  Anthropic event order `message_start → content_block_start → content_block_delta* →
+  content_block_stop → message_delta → message_stop`. Pure `Translator` state machine + 1 unit test
+  (4 total). **Verified live against real vLLM** (`10.0.0.13:8000`, now reachable from dev host) and
+  the musl→scratch `docker compose build` still links statically.
+- **⚠️ Finding — vLLM model is a reasoning model.** `qwen3.6-35b` streams chain-of-thought in
+  `delta.reasoning` (note: `reasoning`, **not** `reasoning_content`) before `delta.content`; non-stream
+  puts it in `message.reasoning`. **Step 3 drops reasoning** (text only, per §5c) — a normal reply
+  streams correctly, but the model is silent during its (often long) thinking phase, and a too-small
+  `max_tokens` can exhaust the budget on reasoning alone (empty `content`, `stop_reason:max_tokens`).
+  **Now handled conditionally (Step 4):** when the request enables `thinking`, reasoning is surfaced as
+  Anthropic `thinking` blocks (non-stream + streaming `thinking_delta` + a synthetic `signature_delta`,
+  since vLLM gives no signature and we are the server, so nothing re-validates it); when thinking is
+  off (this sandbox: `MAX_THINKING_TOKENS=0`), reasoning is dropped, matching real Anthropic behavior.
+- ✅ **Steps 4 & 5 done** (blocker resolved — see below). Expanded the wire types (Anthropic
+  image/tool_use/tool_result/thinking blocks, tools, tool_choice; OpenAI multimodal parts, tool_calls,
+  `tool` role, tool defs, streaming tool deltas). `translate.rs`: multimodal messages, **image hoist**
+  (tool_result images → trailing user message, ported from `claude-shim.js`), tool_use→tool_calls,
+  tool_result→`tool` role, tools/tool_choice map, param strip. Response: text + tool_use blocks, plus
+  a `thinking` block **only when the client enabled thinking**. `stream.rs`: tool_use streaming
+  (`input_json_delta`) + conditional reasoning→thinking, one monotonic block index. `count_tokens`
+  now calls vLLM `/tokenize` (chars/4 fallback). **8 unit tests.** Verified live against real vLLM and
+  via the **real `claude` CLI**: streaming chat, non-stream + streaming tool calls, a Read-tool task
+  (returned the file's secret), `count_tokens`, and the **image-in-`tool_result` hoist** — the
+  vision model answered "Red" both by curl and through `claude -p` reading a PNG. Scratch image still
+  builds.
+- **✅ Blocker resolved (was §2): vLLM emits standard OpenAI `tool_calls`** (`finish_reason:tool_calls`,
+  `message.tool_calls[].function.{name,arguments}`) — the `hermes` path the PLAN predicted, confirmed
+  empirically. No text-template parsing needed.
 - **Wiring:** proxy is NOT yet in Claude's path. Sandbox still uses litellm + `claude-shim.js`.
   Compose runs the proxy standalone (`agentic-harness-proxy`, bind `0.0.0.0:4000`, no published
-  ports) so it doesn't interfere. Cutover is Step 6.
-- **➡️ Next: Step 3** — streaming SSE translation (OpenAI chunks → Anthropic Messages events).
+  ports) so it doesn't interfere. Cutover is Step 7.
+- **➡️ Next: Step 6** — production logging & error handling (§5d); then Step 7 cutover.
 
 ---
 
@@ -61,7 +92,12 @@ litellm:4000). Final step re-points `ANTHROPIC_BASE_URL` → `http://127.0.0.1:4
 
 ---
 
-## 2. ⚠️ Open blocker (gates tool-call work only)
+## 2. ✅ RESOLVED blocker (was: gates tool-call work)
+
+**Confirmed empirically (2026-06-26):** the live vLLM at `10.0.0.13:8000` returns **standard OpenAI
+`tool_calls`** with `finish_reason:tool_calls` for a normal tools request — the `hermes`/auto-tool-choice
+path below. The proxy's 1:1 tool translation works (verified non-stream + streaming + via `claude` CLI).
+No text-template parsing needed; the jammsen question is moot. Original note kept for context:
 
 **How is our vLLM launched re: tool calls?** Asked on issue #10, waiting on @jammsen.
 - vLLM needs `--enable-auto-tool-choice --tool-call-parser <name>` to emit tool calls. Per the vLLM
@@ -239,10 +275,14 @@ debug a failure from the logs **without** any prompt content, secret, or token e
    Anthropic→OpenAI request, POST to `${VLLM_URL}/v1/chat/completions`, response translated back.
    `VLLM_URL`/`VLLM_MODEL` are required env (no hardcoded defaults). Verified vs. a local OpenAI mock
    (vLLM `10.0.0.13:8000` unreachable from dev host); re-verify in compose against real vLLM.
-3. **➡️ NEXT — Streaming SSE** (text only). ✅ Claude Code in the container streams a normal chat reply.
-4. **Image hoist + param strip + alias map + `count_tokens`.** ✅ Read-an-image flow works
-   end-to-end (the thing LiteLLM broke).
-5. **(GATED on jammsen)** Tool-call translation, non-stream then streaming. ✅ a tool-using task works.
+3. ✅ **DONE — Streaming SSE** (text only). `src/stream.rs` + `tokio-stream`; vLLM chunk SSE →
+   Anthropic Messages events. Verified live against real vLLM and via a `Translator` unit test
+   (event order + reasoning-drop + usage). vLLM reasoning (`delta.reasoning`) is dropped — see the
+   reasoning-model finding in §0.
+4. ✅ **DONE — Image hoist + param strip + alias map + `count_tokens`.** Read-an-image flow works
+   end-to-end (the thing LiteLLM broke): `claude -p` Read of a PNG → vision model answered "Red".
+5. ✅ **DONE (blocker resolved)** — Tool-call translation, non-stream + streaming. A `claude -p`
+   Read-tool task ran the full agentic loop through the proxy and returned the file's secret.
 6. **Production logging & error handling** (independent — can land any time after Step 2, **must be
    in before cutover**). Implement the contract in §5d: structured `tracing` logs to stderr,
    never logging prompt/response bodies or auth; one `ProxyError` type → correct HTTP status +

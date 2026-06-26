@@ -16,6 +16,7 @@ use std::env;
 
 mod anthropic;
 mod openai;
+mod stream;
 mod translate;
 
 use anthropic::MessagesRequest;
@@ -63,7 +64,13 @@ fn require_env(key: &str) -> String {
 
 /// POST /v1/messages — translate Anthropic request, call vLLM, translate the response back.
 async fn messages(State(state): State<AppState>, Json(req): Json<MessagesRequest>) -> Response {
+    let streaming = req.stream.unwrap_or(false);
+    let thinking = req.thinking_enabled();
     let oai = translate::to_openai(req, state.vllm_model.clone());
+
+    if streaming {
+        return stream::stream(state.client, state.vllm_url, state.vllm_model, oai, thinking).await;
+    }
 
     let upstream = state
         .client
@@ -88,15 +95,33 @@ async fn messages(State(state): State<AppState>, Json(req): Json<MessagesRequest
     }
 
     match resp.json::<ChatResponse>().await {
-        Ok(cr) => Json(translate::to_anthropic(cr, state.vllm_model)).into_response(),
+        Ok(cr) => Json(translate::to_anthropic(cr, state.vllm_model, thinking)).into_response(),
         Err(e) => anthropic_error(StatusCode::BAD_GATEWAY, format!("decoding vLLM response failed: {e}")),
     }
 }
 
-// ponytail: still a stub. Anthropic's own docs call input_tokens an estimate, so a rough count is
-// spec-compliant; Step 4 swaps in vLLM /tokenize or a chars/4 heuristic (PLAN.md §4).
-async fn count_tokens(Json(_req): Json<Value>) -> Json<Value> {
-    Json(json!({ "input_tokens": 1 }))
+/// POST /v1/messages/count_tokens — Anthropic returns `{"input_tokens": N}`, officially an estimate.
+/// We flatten the request text and ask vLLM's /tokenize; on any failure, fall back to chars/4.
+async fn count_tokens(State(state): State<AppState>, Json(req): Json<MessagesRequest>) -> Json<Value> {
+    let text = translate::request_text(&req);
+    let approx = (text.len() / 4) as u64;
+
+    let count = match state
+        .client
+        .post(format!("{}/tokenize", state.vllm_url))
+        .json(&json!({ "model": state.vllm_model, "prompt": text }))
+        .send()
+        .await
+    {
+        Ok(r) if r.status().is_success() => r
+            .json::<Value>()
+            .await
+            .ok()
+            .and_then(|v| v.get("count").and_then(Value::as_u64))
+            .unwrap_or(approx),
+        _ => approx,
+    };
+    Json(json!({ "input_tokens": count }))
 }
 
 /// Anthropic-shaped error envelope so Claude Code parses our failures the same as upstream's.
