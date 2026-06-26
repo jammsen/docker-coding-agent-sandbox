@@ -1,0 +1,245 @@
+# harness-proxy — Implementation Plan & Handoff
+
+Self-contained brief so a fresh Claude/LLM session can pick this up cold.
+Tracks GitHub issue **#10**. Headroom (compression) is **out of scope** → issue **#11**.
+
+Branch: `feat/harness-proxy` (off `feat/webtty`).
+
+---
+
+## 1. What we're building and why
+
+Replace the **LiteLLM Python sidecar** + the **`claude-shim.js` Node proxy** with one
+statically-linked Rust binary, `harness-proxy`.
+
+It is an **API translator**: Claude Code speaks the Anthropic Messages API; our backend is a
+**vLLM** server speaking the OpenAI Chat Completions API. The proxy translates between them,
+including streaming, and hoists images out of `tool_result` blocks (which LiteLLM drops).
+
+Target: a ~15 MB `FROM scratch` image, no Python/Node in the request path.
+
+### Concrete environment (current, do not guess)
+
+| Thing | Value |
+|---|---|
+| vLLM base URL | `http://10.0.0.13:8000` (OpenAI API at `/v1`) — make it env `VLLM_URL` |
+| vLLM model name | `qwen3.6-35b` — env `VLLM_MODEL` |
+| Vision capable | yes (`supports_vision: true`) |
+| Anthropic aliases Claude sends | `claude-sonnet-4-5`, `claude-haiku-4-5` (set via `ANTHROPIC_DEFAULT_*_MODEL` in `config/claude/settings.json`) — both map to the one vLLM model |
+| Claude points at | `ANTHROPIC_BASE_URL` (today `http://127.0.0.1:4001`) |
+| API key | `dummy` (header `x-api-key` / `Authorization: Bearer dummy`) |
+
+The proxy should **listen on `127.0.0.1:4000`** (replacing both the old shim:4001 and the
+litellm:4000). Final step re-points `ANTHROPIC_BASE_URL` → `http://127.0.0.1:4000`.
+
+---
+
+## 2. ⚠️ Open blocker (gates tool-call work only)
+
+**How is our vLLM launched re: tool calls?** Asked on issue #10, waiting on @jammsen.
+- vLLM needs `--enable-auto-tool-choice --tool-call-parser <name>` to emit tool calls. Per the vLLM
+  docs, **Qwen2.5's chat template already ships Hermes-style tool support, so the parser is `hermes`**
+  (Qwen3-Coder would use `qwen3_xml`). With a parser enabled, vLLM returns **standard OpenAI
+  `tool_calls`** (`choices[].message.tool_calls[].function.{name,arguments}`) → simple 1:1 translation.
+  **Build for this case by default** (model is `qwen3.6-35b`, almost certainly `hermes`).
+- If auto-tool-choice / a parser is **not** set → vLLM emits tool calls as plain text in a template;
+  the proxy would then have to parse that text itself (much more work, brittle). Only handle this if
+  jammsen confirms it's the case — easiest fix is to enable the flags on the vLLM side instead.
+
+Everything except Step 5 below is independent of this answer. Do not wait — build Steps 1–4.
+
+---
+
+## 3. Stack & build
+
+- Rust, **axum** + **tokio**. HTTP client: **reqwest with `rustls-tls`** (default features off,
+  `rustls-tls` on) → no OpenSSL, no dynamic glibc TLS dep. Upstream vLLM call is plain `http`, so
+  no outbound TLS is needed in practice, but rustls keeps the binary fully static.
+- Build the binary **statically** for the target arch: `--target x86_64-unknown-linux-musl --release`.
+  Static musl is what makes a `FROM scratch` final image actually work (no libc/loader at runtime).
+- Single crate, single binary. **Do not** build a multi-crate workspace — YAGNI.
+
+### Image strategy — **no Alpine**. Chisel/Ubuntu builder → `FROM scratch` target
+
+Two stages, both consistent with the repo (which already pins `ubuntu:26.04`):
+
+1. **Builder stage = Ubuntu, NOT `rust:*-alpine`.** Compile on an Ubuntu base (matching the project's
+   `ubuntu:26.04`): install Rust via rustup, `rustup target add x86_64-unknown-linux-musl`,
+   `apt-get install musl-tools`, then `cargo build --release --target x86_64-unknown-linux-musl`.
+   The Alpine builder is explicitly rejected — we stay in the Ubuntu/Canonical toolchain.
+2. **Final stage = `FROM scratch`** containing only the static target-arch binary (`COPY --from=builder
+   …/harness-proxy /harness-proxy`). Because it's static musl + rustls over plain http, scratch needs
+   **nothing else** — no libc, no ca-certificates.
+
+**Fallback (only if a fully-static musl build proves impractical**, e.g. a transitive crate that won't
+build on musl): instead of `FROM scratch`, ship a **chiselled Ubuntu rootfs** built with **Chisel**
+(`chisel cut --release ubuntu-26.04 --root /rootfs libc6_libs ca-certificates_data …`) as the final
+stage and copy a glibc-dynamic binary into it. This keeps us on minimal Ubuntu slices instead of a full
+base image — still tiny, still no Alpine. See the Chisel "use in a Dockerfile" how-to in References.
+Default to scratch+musl; treat chisel as the documented escape hatch.
+
+Suggested layout (keep it flat):
+```
+harness-proxy/
+  PLAN.md          # this file
+  Cargo.toml
+  Dockerfile       # multi-stage: ubuntu builder (musl) -> FROM scratch
+  src/
+    main.rs        # axum router, config from env, listen 127.0.0.1:4000
+    anthropic.rs   # Anthropic request/response/SSE types (serde)
+    openai.rs      # OpenAI request/response/chunk types (serde)
+    translate.rs   # request: Anthropic->OpenAI (+image hoist, param strip, alias map)
+                   # response: OpenAI->Anthropic (non-stream + streaming SSE)
+```
+Split further only if a file gets unwieldy.
+
+---
+
+## 4. Endpoints to implement
+
+Claude Code calls these against `ANTHROPIC_BASE_URL`:
+1. `POST /v1/messages` — non-streaming **and** streaming (`"stream": true`). The bulk of the work.
+2. `POST /v1/messages/count_tokens` — accepts the same body shape as `/v1/messages` and returns
+   exactly `{"input_tokens": N}` (verified, Anthropic docs). Anthropic itself states the count is an
+   **estimate**, so an approximation is spec-compliant. Strategy: call vLLM's `/tokenize` endpoint
+   (vLLM exposes one) for accuracy, else approximate (e.g. chars/4). Don't over-engineer; a rough
+   count unblocks the client.
+
+Headers: pass through, force the upstream model to `VLLM_MODEL`, send `Authorization: Bearer dummy`.
+
+---
+
+## 5. Translation details (the actual work)
+
+### 5a. Request: Anthropic `/v1/messages` → OpenAI `/v1/chat/completions`
+- **Alias map:** any incoming `model` → `VLLM_MODEL`.
+- **System prompt:** Anthropic `system` (string or blocks) → OpenAI `{"role":"system"}` message.
+- **Messages:** map roles; Anthropic content blocks → OpenAI parts:
+  - `text` → `{"type":"text"}`
+  - `image` (`source.type=base64`) → `{"type":"image_url","image_url":{"url":"data:<media_type>;base64,<data>"}}`
+  - `tool_use` (assistant) → OpenAI `tool_calls` entry (`id`, `function.name`, `function.arguments` = JSON string)
+  - `tool_result` (user) → OpenAI `{"role":"tool","tool_call_id":...,"content": <text>}`
+- **🔑 Image hoist** (replaces `claude-shim.js`): OpenAI/vLLM **cannot** carry images in a
+  `role:"tool"` message. So when a `tool_result` contains image sub-blocks:
+  - keep the tool message **text-only** (use placeholder `"[image returned by tool — see following message]"` if no text),
+  - append a **new `role:"user"`** message right after with `[{type:text,"Image(s) returned by the tool call above:"}, <the image_url parts>]`.
+  - Only do this when an image is actually present (text-only tool_results stay byte-identical).
+  - Reference logic: `scripts/claude-shim.js` (`hoistToolResultImages`) and
+    `ideas/litellm-issue-tool_result-image-drop.md` (full root-cause writeup + suggested upstream fix).
+- **Param strip** (replaces LiteLLM `drop_params: true`): drop fields vLLM rejects — `thinking`,
+  `reasoning_effort`, and any Anthropic-only knobs. Map `max_tokens`, `temperature`, `top_p`,
+  `stop_sequences`→`stop`, `stream`. Map `tools` (Anthropic `input_schema` → OpenAI
+  `function.parameters`) and `tool_choice`.
+
+### 5b. Response (non-streaming): OpenAI → Anthropic
+- `choices[0].message.content` → Anthropic `content: [{type:text}]`.
+- `choices[0].message.tool_calls` → Anthropic `tool_use` blocks (`input` = parsed JSON of `arguments`).
+- `finish_reason` → `stop_reason`: `stop`→`end_turn`, `length`→`max_tokens`, `tool_calls`→`tool_use`.
+- `usage.prompt_tokens`/`completion_tokens` → `usage.input_tokens`/`output_tokens`.
+
+### 5c. Response (streaming): OpenAI `chat.completion.chunk` SSE → Anthropic Messages SSE
+This is ~80% of the effort and the main correctness risk. vLLM sends `data: {chunk}` lines ending
+with `data: [DONE]`. The proxy must emit the Anthropic event sequence (each as
+`event: <type>\ndata: <json>\n\n`):
+1. `message_start` (with `message` skeleton: role assistant, empty content, model, usage stub)
+2. For the text content block: `content_block_start` (index 0, `{type:text,text:""}`), then one
+   `content_block_delta` per chunk (`{type:text_delta, text:<delta>}`), then `content_block_stop`.
+3. For **tool calls**: each `tool_calls` delta → a content block of `{type:tool_use,...}`;
+   stream the function arguments as `content_block_delta` with `{type:input_json_delta, partial_json:<delta>}`.
+   (This is the part gated by the vLLM tool-call format — Step 5 / blocker above.)
+4. `message_delta` with `stop_reason` + final `usage`, then `message_stop`.
+5. Send periodic `ping` events if needed; Claude tolerates them.
+
+Keep an index counter for content blocks. Tool-call argument deltas arrive incrementally — buffer
+per `tool_calls[].index`.
+
+---
+
+## 6. Step-by-step (each step independently testable)
+
+1. **Scaffold + Dockerfile.** Cargo bin, axum, env config, listen `127.0.0.1:4000`,
+   `POST /v1/messages` returns a hardcoded Anthropic non-stream response. Multi-stage musl→scratch
+   builds and runs. ✅ when `curl` to the container gets the dummy reply.
+2. **Non-streaming translation** against real vLLM (text only). ✅ real model answer round-trips.
+3. **Streaming SSE** (text only). ✅ Claude Code in the container streams a normal chat reply.
+4. **Image hoist + param strip + alias map + `count_tokens`.** ✅ Read-an-image flow works
+   end-to-end (the thing LiteLLM broke).
+5. **(GATED on jammsen)** Tool-call translation, non-stream then streaming. ✅ a tool-using task works.
+6. **(GATED — do last, after proxy proven)** Remove the old stack:
+   - `compose.yml`: delete the `litellm` service + `LITELLM_UPSTREAM` env; add proxy build/run.
+   - delete `config/litellm-config.yaml`, `scripts/claude-shim.js`.
+   - `entrypoint.sh`: drop the `claude-shim` supervisor block; start `harness-proxy` instead.
+   - `config/claude/settings.json`: `ANTHROPIC_BASE_URL` → `http://127.0.0.1:4000`.
+   - Leave `scripts/upload-server.js` and `scripts/analyze-image.js` **untouched** (out of scope).
+
+Until Step 6, run the proxy **alongside** LiteLLM (different port) so nothing breaks during dev.
+
+---
+
+## 7. How to test (in-container)
+
+- Build & run the sandbox (see top-level `README.md` / `compose.yml`).
+- Control vs. broken-case curls for the image path are in
+  `ideas/litellm-issue-tool_result-image-drop.md` (steps 2 vs 3) — reuse them against the proxy.
+- Real integration test: open WeTTY (`https://<host>:1111`), launch Claude Code, run a normal
+  prompt (streaming), then `Read` an image in `workspace/uploads/` (image hoist), then a
+  tool-using task (after Step 5).
+- Leave one runnable check behind for the translation logic (the non-trivial part): a small Rust
+  unit test asserting (a) a `tool_result`-with-image request hoists the image into a trailing user
+  message, and (b) an OpenAI chunk stream maps to the expected Anthropic event order.
+
+---
+
+## 8. Don'ts (scope guard)
+
+- ❌ No Headroom / compression here → #11.
+- ❌ Don't port `upload-server.js` or `analyze-image.js` (Node stdlib, not the bloat).
+- ❌ No multi-crate workspace, no plugin abstraction, no config file — env vars only.
+- ❌ Don't delete LiteLLM until the proxy is proven (Step 6 is last).
+- ❌ Don't oversell "<15 MB RAM" — realistic is 15–40 MB with tokio + stream buffers.
+
+---
+
+## 9. References (authoritative — build against these, not assumptions)
+
+**Anthropic Messages API (what Claude Code sends/expects)**
+- Messages API reference: https://platform.claude.com/docs/en/api/messages
+- **Streaming SSE** (canonical event order + delta shapes — the core of §5c):
+  https://platform.claude.com/docs/en/docs/build-with-claude/streaming
+  - Verified sequence: `message_start` → (per content block) `content_block_start` →
+    `content_block_delta` → `content_block_stop` → `message_delta` → `message_stop`, with `ping`
+    interspersed. Text deltas use `{"type":"text_delta","text":"…"}`; **tool_use** argument deltas
+    use `{"type":"input_json_delta","partial_json":"…"}` (accumulate to get the full JSON args).
+- **count_tokens** endpoint: https://platform.claude.com/docs/en/docs/build-with-claude/token-counting
+  and ref https://platform.claude.com/docs/en/api/messages-count-tokens
+  - Verified: same input body as `/v1/messages`, response is `{"input_tokens": N}`, officially an estimate.
+- Tool use overview (Anthropic side of `tool_use`/`tool_result`):
+  https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview
+
+**vLLM (the OpenAI-compatible backend we translate to)**
+- OpenAI-compatible server: https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html
+- **Tool calling** (flags + parsers): https://docs.vllm.ai/en/latest/features/tool_calling.html
+  - Verified: `--enable-auto-tool-choice` + `--tool-call-parser` required; **Qwen2.5 → `hermes`**;
+    response carries standard OpenAI `tool_calls` (`message.tool_calls[].function.{name,arguments}`).
+
+**OpenAI Chat Completions (the wire format vLLM speaks)**
+- Create chat completion + streaming chunk object (`chat.completion.chunk`, `choices[].delta`,
+  `finish_reason`, `usage`): https://platform.openai.com/docs/api-reference/chat
+
+**Build / packaging**
+- Chisel (minimal Ubuntu rootfs; the fallback to scratch): https://ubuntu.com/chisel/docs/latest/
+  - `chisel cut` CLI + slices reference, and "Use Chisel in a Dockerfile" how-to (multi-stage builds).
+  - chisel-releases (slice definitions, e.g. `libc6_libs`, `ca-certificates_data`):
+    https://github.com/canonical/chisel-releases
+- Rust musl static target: https://doc.rust-lang.org/rustc/platform-support.html (x86_64-unknown-linux-musl)
+- reqwest rustls feature: https://docs.rs/reqwest (enable `rustls-tls`, disable default `native-tls`)
+- axum: https://docs.rs/axum • tokio: https://docs.rs/tokio
+
+**In-repo references (existing behavior to preserve)**
+- `scripts/claude-shim.js` — `hoistToolResultImages()` is the exact image-hoist logic to port (§5a).
+- `ideas/litellm-issue-tool_result-image-drop.md` — full root-cause writeup of the `tool_result`
+  image-drop bug + reproduction curls (reuse for testing) + the byte-identical-when-no-image rule.
+- `config/litellm-config.yaml` — the model aliases + `drop_params: true` behavior we're replacing.
+- `config/claude/settings.json` — `ANTHROPIC_BASE_URL` and `ANTHROPIC_DEFAULT_*_MODEL` wiring.
+- `Dockerfile` (top-level) — pins `ubuntu:26.04`; keep the builder on the same Ubuntu lineage.
+- GitHub: issue **#10** (this work), issue **#11** (Headroom, out of scope).
