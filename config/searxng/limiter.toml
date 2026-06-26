@@ -1,0 +1,7 @@
+# Disable bot-detection so the MCP server can query SearXNG programmatically.
+[botdetection.ip_limit]
+link_token = false
+
+[botdetection.ip_lists]
+block_ip = []
+pass_ip = []

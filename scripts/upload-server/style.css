@@ -1,0 +1,480 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #0f1117;
+  color: #e2e8f0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 24px;
+  padding: 24px;
+}
+
+.card {
+  background: #1a1d2e;
+  border: 1px solid #2d3148;
+  border-radius: 12px;
+  padding: 32px;
+  width: 100%;
+  max-width: 640px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+
+h1 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #a5b4fc;
+  margin-bottom: 6px;
+}
+
+.subtitle {
+  font-size: 0.85rem;
+  color: #475569;
+  margin-bottom: 24px;
+}
+
+/* Drop zone */
+.drop-zone {
+  border: 2px dashed #3d4263;
+  border-radius: 8px;
+  padding: 44px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  user-select: none;
+}
+
+.drop-zone:hover {
+  border-color: #6366f1;
+  background: rgba(99,102,241,0.06);
+}
+
+.drop-zone.drag-over {
+  border-color: #818cf8;
+  border-style: solid;
+  background: rgba(99,102,241,0.12);
+}
+
+.drop-icon { font-size: 2.4rem; margin-bottom: 10px; line-height: 1; }
+
+.drop-label { font-size: 0.95rem; color: #94a3b8; }
+.drop-label strong { color: #a5b4fc; }
+.drop-hint { font-size: 0.78rem; color: #475569; margin-top: 6px; }
+
+/* Paste hint */
+.paste-hint {
+  margin-top: 10px;
+  padding: 8px 14px;
+  background: rgba(99,102,241,0.08);
+  border: 1px solid #2d3148;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  color: #818cf8;
+  text-align: center;
+}
+
+.paste-hint kbd {
+  background: #2d3148;
+  border: 1px solid #3d4263;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: monospace;
+  font-size: 0.8rem;
+}
+
+/* Buttons (base) */
+button {
+  font-size: 0.88rem;
+  font-weight: 500;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 10px 20px;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Queue section */
+.queue-section { margin-top: 20px; }
+
+.queue-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.queue-count-label {
+  font-size: 0.85rem;
+  color: #818cf8;
+  font-weight: 500;
+}
+
+.btn-ghost {
+  background: transparent;
+  border: 1px solid #2d3148;
+  color: #64748b;
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  border-radius: 6px;
+}
+.btn-ghost:hover { background: #2d3148; color: #94a3b8; }
+
+.queue-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.queue-item { width: 96px; position: relative; }
+
+.queue-thumb {
+  width: 96px;
+  height: 96px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #0f1117;
+  border: 2px solid transparent;
+  position: relative;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.queue-thumb:hover { border-color: #6366f1; }
+
+.queue-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.queue-thumb-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  color: #3d4263;
+}
+
+/* State borders */
+.queue-item.uploading .queue-thumb { border-color: #818cf8; }
+.queue-item.done  .queue-thumb     { border-color: #22c55e; }
+.queue-item.error .queue-thumb     { border-color: #ef4444; }
+
+/* Dim image while uploading */
+.queue-item.uploading .queue-thumb img { opacity: 0.4; }
+
+/* Remove button — top-right corner of thumbnail */
+.queue-remove {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: rgba(0,0,0,0.65);
+  color: #94a3b8;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.68rem;
+  line-height: 20px;
+  text-align: center;
+  cursor: pointer;
+  z-index: 2;
+  transition: background 0.15s;
+}
+.queue-remove:hover { background: rgba(239,68,68,0.85); color: #fff; }
+
+/* Status badge — bottom-left corner */
+.queue-badge {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: 0.7rem;
+  line-height: 20px;
+  text-align: center;
+  z-index: 2;
+  font-weight: 700;
+}
+.queue-badge.done  { background: #22c55e; color: #fff; }
+.queue-badge.error { background: #ef4444; color: #fff; }
+
+/* Upload spinner — centered on thumbnail */
+.queue-spinner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 26px;
+  height: 26px;
+  border: 2px solid rgba(255,255,255,0.2);
+  border-top-color: #818cf8;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  z-index: 2;
+  transform: translate(-50%, -50%);
+}
+@keyframes spin {
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+/* Filename below thumbnail */
+.queue-name {
+  font-size: 0.68rem;
+  color: #64748b;
+  margin-top: 5px;
+  line-height: 1.3;
+  word-break: break-all;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Path + copy after a successful upload */
+.queue-result {
+  margin-top: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.queue-path {
+  font-family: Consolas, 'Fira Mono', monospace;
+  font-size: 0.62rem;
+  color: #a5f3fc;
+  word-break: break-all;
+  line-height: 1.3;
+}
+
+.queue-copy {
+  align-self: flex-start;
+  background: #2d3148;
+  color: #94a3b8;
+  border: none;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 0.68rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.queue-copy:hover { background: #3d4263; }
+.queue-copy.ok    { color: #86efac; }
+
+/* Error text below thumbnail */
+.queue-error-text {
+  margin-top: 4px;
+  font-size: 0.68rem;
+  color: #fca5a5;
+  line-height: 1.3;
+  overflow-wrap: break-word;
+}
+
+/* Upload button */
+.actions { margin-top: 4px; }
+
+#btnUpload {
+  background: #6366f1;
+  color: #fff;
+  width: 100%;
+  padding: 11px 20px;
+}
+#btnUpload:not(:disabled):hover { background: #4f46e5; }
+
+/* Shared path / result row (gallery modal) */
+.path-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #0f1117;
+  border: 1px solid #2d3148;
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+
+.result-row { margin-top: 10px; }
+.result-row:first-of-type { margin-top: 0; }
+
+.result-label {
+  font-size: 0.78rem;
+  color: #64748b;
+  margin-bottom: 5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.mono-path {
+  font-family: Consolas, 'Fira Mono', monospace;
+  font-size: 0.84rem;
+  color: #a5f3fc;
+  flex: 1;
+  word-break: break-all;
+}
+
+.modal-prompt-text {
+  font-size: 0.84rem;
+  flex: 1;
+  word-break: break-all;
+}
+
+#btnModalCopyPath,
+#btnModalCopyPrompt {
+  background: #2d3148;
+  color: #94a3b8;
+  padding: 6px 12px;
+  font-size: 0.78rem;
+  flex-shrink: 0;
+}
+#btnModalCopyPath:hover,
+#btnModalCopyPrompt:hover { background: #3d4263; }
+#btnModalCopyPath.ok,
+#btnModalCopyPrompt.ok    { color: #86efac; }
+
+/* Gallery card */
+.gallery-card {
+  background: rgba(99,102,241,0.05);
+  border-color: rgba(99,102,241,0.25);
+}
+
+.gallery-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.gallery-header h2 { font-size: 1rem; font-weight: 600; color: #818cf8; }
+
+#btnRefresh {
+  background: transparent;
+  border: 1px solid #2d3148;
+  color: #64748b;
+  padding: 5px 12px;
+  font-size: 0.82rem;
+  border-radius: 6px;
+}
+#btnRefresh:hover { background: #2d3148; color: #94a3b8; }
+
+.gallery-empty {
+  text-align: center;
+  padding: 24px 0;
+  font-size: 0.85rem;
+  color: #475569;
+}
+
+.gallery-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.thumb {
+  width: 96px;
+  aspect-ratio: 1;
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: pointer;
+  border: 2px solid transparent;
+  background: #0f1117;
+  transition: border-color 0.15s, transform 0.1s;
+}
+.thumb:hover { border-color: #6366f1; transform: scale(1.04); }
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* Modal */
+.modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.modal.open { display: flex; }
+
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.78);
+  backdrop-filter: blur(4px);
+  cursor: pointer;
+}
+
+.modal-box {
+  position: relative;
+  background: #1a1d2e;
+  border: 1px solid #2d3148;
+  border-radius: 12px;
+  padding: 28px 24px 24px;
+  width: 100%;
+  max-width: 700px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+  z-index: 1;
+}
+
+#btnModalClose {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: #2d3148;
+  color: #94a3b8;
+  border: none;
+  border-radius: 6px;
+  width: 30px;
+  height: 30px;
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0;
+  line-height: 30px;
+  text-align: center;
+}
+#btnModalClose:hover { background: #3d4263; }
+
+#modalImg {
+  display: block;
+  max-width: 100%;
+  max-height: 55vh;
+  margin: 0 auto 8px;
+  border-radius: 6px;
+  object-fit: contain;
+  background: #0f1117;
+}
+
+.modal-name {
+  font-size: 0.75rem;
+  color: #475569;
+  text-align: center;
+  margin-bottom: 16px;
+  font-family: Consolas, 'Fira Mono', monospace;
+  word-break: break-all;
+}
+
+.modal-delete-row {
+  margin-top: 18px;
+  display: flex;
+  justify-content: center;
+}
+
+#btnModalDelete {
+  background: rgba(239,68,68,0.12);
+  color: #fca5a5;
+  border: 1px solid rgba(239,68,68,0.35);
+  padding: 8px 28px;
+  font-size: 0.88rem;
+  border-radius: 6px;
+}
+#btnModalDelete:hover { background: rgba(239,68,68,0.22); border-color: rgba(239,68,68,0.6); color: #fecaca; }
+#btnModalDelete.confirming { background: rgba(239,68,68,0.80); color: #fff; border-color: transparent; }

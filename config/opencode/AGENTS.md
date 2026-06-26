@@ -45,12 +45,12 @@ The browser binary is at `$PLAYWRIGHT_BROWSERS_PATH` (`/home/agent/.cache/ms-pla
 
 ## Running Background Servers
 
-Port 1111 is the single externally reachable port. If the user wants to expose a server (dev server, HTTP API, or any other service), bind it to `0.0.0.0:1111`.
+Port **3000** is the externally reachable port for agent-hosted servers. Port 1111 is reserved for the WeTTY browser terminal. If the user wants to expose a server (dev server, HTTP API, or any other service), bind it to `0.0.0.0:3000`.
 
 **Always check before starting a server** — do not blindly launch a new process:
 
 ```bash
-ss -tlnp | grep 1111
+ss -tlnp | grep 3000
 ```
 
 If something is already listening, do not start another instance. If the port is free, start the server with `nohup` so it survives the current shell invocation:
@@ -68,7 +68,7 @@ kill $(cat /tmp/server.pid) 2>/dev/null || true
 After killing, verify the port is free before proceeding:
 
 ```bash
-ss -tlnp | grep 1111 || echo "Port 1111 is free"
+ss -tlnp | grep 3000 || echo "Port 3000 is free"
 ```
 
 **Never use `lsof -i :<port>` to find or kill processes** — `lsof` network socket inspection hangs in this container due to capability restrictions. Always use the PID file to kill, and `ss` to verify.
@@ -76,6 +76,20 @@ ss -tlnp | grep 1111 || echo "Port 1111 is free"
 **Never use `pkill -f` as a primary kill method** — many runtimes (Node.js, Python, Rust binaries, JVM) spawn child processes whose names do not match the original command. The PID file is the only reliable kill target.
 
 Never use `&` alone without `nohup` for servers — background processes started without `nohup` may not survive shell resets.
+
+## Web Search
+
+`curl` and `wget` work fine for fetching a known URL directly. The built-in `webfetch` and `websearch` permissions are disabled. For search queries (no URL), use the `searxng_web_search` MCP tool — search engines block automated curl requests, so curl will return nothing useful on search pages. `web_url_read` is also available to fetch and convert a URL to markdown.
+
+## Image Analysis
+
+When asked to analyze or describe an image at a file path, run the `analyze-image` command and report its output:
+
+```bash
+analyze-image /path/to/image.png "your question or focus here"
+```
+
+Pass the user's intent as the second argument. If no specific focus is given, omit it and the default description prompt is used. Do not attempt to read the raw binary file, install packages, or write Python scripts to inspect the image. The `analyze-image` command handles vision analysis directly and returns a text description.
 
 ## Skills
 

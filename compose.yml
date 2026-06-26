@@ -3,42 +3,110 @@ services:
     build:
       context: .
       args:
-        PYTHON_VERSION: "3.13"   # override here to change the Python version
+        PYTHON_VERSION: "3.13"                  # override here to change the Python version
     container_name: agentic-harness-sandbox
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
       - HOME=/home/agent
-      - TOOLS=opencode,omp   # order defines menu order and default (first = default)
-    init: true                         # tini as PID 1 — reaps zombie child processes
-    stdin_open: true
-    tty: true
-    read_only: false                   # opencode writes session state
+      - SHELL=/bin/bash
+      - USER=agent
+      - LANG=C.UTF-8                            # ensures TUI apps (opencode, omp) render Unicode box-drawing chars
+      - LC_ALL=C.UTF-8
+      - TOOLS=claude,opencode,omp               # order defines menu order and default (first = default)
+      - DEFAULT_TOOL=${DEFAULT_TOOL:-}          # pass-through from host shell; empty = show menu in browser
+      - CLAUDE_CODE_NO_FLICKER=1                # prevents Claude Code from using alt-screen tricks that break scroll in WeTTY
+      - LITELLM_UPSTREAM=http://agentic-litellm:4000   # upstream for claude-shim.js (Claude image-rewrite proxy on 127.0.0.1:4001)
+      - SEARXNG_URL=http://searxng:8080              # used by OMP's built-in web search (providers.webSearch=searxng) and mcp-searxng
+      - VLLM_URL=${VLLM_URL:-http://10.0.0.13:8000/v1} # vLLM API base incl. /v1 — override by setting VLLM_URL in your shell before compose up
+    init: true                                  # tini as PID 1 — reaps zombie child processes
+    restart: unless-stopped                     # auto-restart on failure or host reboot
+    read_only: false                            # opencode writes session state
     security_opt:
-      - no-new-privileges:true         # prevent privilege escalation
+      - no-new-privileges:true                  # prevent privilege escalation
     cap_drop:
-      - ALL                            # drop all Linux capabilities
+      - ALL                                     # drop all Linux capabilities
     cap_add:
-      - CHOWN                          # entrypoint: chown -R on /home/agent
-      - SETUID                         # gosu + useradd/usermod
-      - SETGID                         # gosu + groupadd/groupmod
-      - DAC_OVERRIDE                   # allows root to chown/access files it doesn't own
+      - CHOWN                                   # entrypoint: chown -R on /home/agent
+      - SETUID                                  # gosu + useradd/usermod
+      - SETGID                                  # gosu + groupadd/groupmod
+      - DAC_OVERRIDE                            # allows root to chown/access files it doesn't own
     ports:
-      - "1111:1111/tcp"
+      - "1111:1111/tcp"                         # wetty browser terminal — open https://<host>:1111
+      - "1112:1112/tcp"                         # image upload companion — open https://<host>:1112
+      - "3000:3000/tcp"                         # agent dev server port (Vite, Express, Django, Flask, etc.)
     volumes:
-      # Config files (read-only mounts)
-      - ./config/opencode.json:/home/agent/.config/opencode/opencode.json:ro
-      - ./config/AGENTS.md:/home/agent/.config/opencode/AGENTS.md:ro
-      - ./.opencode/skills:/home/agent/.config/opencode/skills:ro
-      - ./.opencode/commands:/home/agent/.config/opencode/commands:ro
-      # OMP Config files (omp-config.yml must be rw so OMP can persist setupVersion)
-      - ./config/omp-config.yml:/home/agent/.omp/agent/config.yml:rw
-      - ./config/omp-settings.json:/home/agent/.omp/agent/settings.json:rw
-      - ./config/omp-models.yml:/home/agent/.omp/agent/models.yml:ro
-      - ./config/omp-AGENTS.md:/home/agent/.omp/agent/AGENTS.md:ro
+      # opencode config (read-only mounts)
+      - ./config/opencode/opencode.json:/home/agent/.config/opencode/opencode.json:ro
+      - ./config/opencode/AGENTS.md:/home/agent/.config/opencode/AGENTS.md:ro
+      - ./config/opencode/skills:/home/agent/.config/opencode/skills:ro
+      - ./config/opencode/commands:/home/agent/.config/opencode/commands:ro
+      - ./config/opencode/agents:/home/agent/.config/opencode/agents:ro
+      # OMP config (omp-config.yml must be rw so OMP can persist setupVersion)
+      - ./config/omp/config.yml:/home/agent/.omp/agent/config.yml:rw
+      - ./config/omp/settings.json:/home/agent/.omp/agent/settings.json:rw
+      - ./config/omp/models.yml:/home/agent/.omp/agent/models.yml:ro
+      - ./config/omp/AGENTS.md:/home/agent/.omp/agent/AGENTS.md:ro
+      - ./config/omp/mcp.json:/home/agent/.omp/agent/mcp.json:ro
+      # Claude Code config (read-only sources; entrypoint syncs them into ~/.claude/ on start)
+      - ./config/claude/settings.json:/home/agent/.config/claude-settings.json:ro
+      - ./config/claude/CLAUDE.md:/home/agent/.config/claude-CLAUDE.md:ro
+      - ./config/claude/agents:/home/agent/.config/claude-agents:ro
+      - ./config/claude/claude.json:/home/agent/.config/claude.json:ro
+      # Claude Code session state (transcripts, checkpoints, etc.)
+      - ./data/claude:/home/agent/.claude:rw
       # Your project workspace (read-write so tools can edit files)
       - ./workspace:/home/agent/workspace:rw
-      - ./data:/home/agent/.local/share/opencode
-      - ./config/auth.json:/home/agent/.local/share/opencode/auth.json:ro
+      - ./data/opencode:/home/agent/.local/share/opencode
+      - ./config/opencode/auth.json:/home/agent/.local/share/opencode/auth.json:ro
     # No network_mode: host — use bridge so container is isolated
     # but can still reach your vLLM server via host IP
+
+  searxng:
+    image: docker.io/searxng/searxng:2026.6.26-f8ffbf36f
+    container_name: agentic-searxng
+    restart: unless-stopped
+    volumes:
+      - ./config/searxng:/etc/searxng:ro
+    environment:
+      - SEARXNG_BASE_URL=http://searxng:8080/
+    depends_on:
+      - valkey
+    # No published ports — only reachable internally via http://searxng:8080
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+      - DAC_OVERRIDE
+
+  valkey:
+    image: docker.io/valkey/valkey:9.1.0-trixie
+    container_name: agentic-valkey
+    command: valkey-server --save 30 1 --loglevel warning
+    restart: unless-stopped
+    volumes:
+      - valkey-data:/data
+
+  litellm:
+    image: ghcr.io/berriai/litellm:v1.89.3        # latest stable as of 2026-06-22; post-attack (1.82.7/1.82.8 were the compromised PyPI versions)
+    container_name: agentic-litellm
+    environment:
+      - LITELLM_LOG=INFO                          # full request/response logging with DEBUG, less verbose with INFO, WARNING, ERROR, CRITICAL
+      - LITELLM_FORCE_CHAT_COMPLETION=true        # force /v1/chat/completions
+      - LITELLM_USE_RESPONSES_API=false           # Disable responses API path entirely
+      - VLLM_URL=${VLLM_URL:-http://10.0.0.13:8000/v1} # passed to litellm-config.yaml via os.environ/VLLM_URL
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # No published ports — the sandbox reaches this proxy over the internal docker network
+    # (agentic-litellm:4000). Uncomment below only to debug the Anthropic→vLLM translation from the host.
+    # ports:
+    #   - "4000:4000/tcp"
+    volumes:
+      - ./config/litellm-config.yaml:/app/config.yaml:ro
+    command: ["--config", "/app/config.yaml", "--port", "4000", "--host", "0.0.0.0"]
+    restart: unless-stopped
+
+volumes:
+  valkey-data:

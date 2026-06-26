@@ -24,8 +24,23 @@ done
 
 docker compose build "${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"}"
 
-if [[ -n "$DEFAULT_TOOL" ]]; then
-    docker compose run --rm --service-ports -e DEFAULT_TOOL="$DEFAULT_TOOL" sandbox
-else
-    docker compose run --rm --service-ports sandbox
+# Stop any existing container before starting fresh
+if docker ps -aq --filter "name=agentic-harness-sandbox" | grep -q .; then
+    echo "> Stopping existing sandbox container..."
+    docker compose down
 fi
+
+# DEFAULT_TOOL is picked up by compose.yml via ${DEFAULT_TOOL:-} passthrough.
+# If set, the browser session skips the tool-selection menu.
+if [[ -n "$DEFAULT_TOOL" ]]; then
+    DEFAULT_TOOL="$DEFAULT_TOOL" docker compose up -d
+else
+    docker compose up -d
+fi
+
+echo ""
+echo "> Sandbox running. Open in your browser (accept the self-signed cert warning once):"
+echo ">   https://$(hostname -I | awk '{print $1}'):1111"
+echo ""
+echo "> Logs: docker compose logs -f"
+echo "> Stop: docker compose down"

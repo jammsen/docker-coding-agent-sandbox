@@ -51,9 +51,8 @@ This will delete all generated OpenCode sandbox state under:
   $ROOT_DIR/workspace/
   $ROOT_DIR/data/
 
-Only these placeholder files will be preserved:
-  $ROOT_DIR/workspace/.gitkeep
-  $ROOT_DIR/data/.gitkeep
+All .gitkeep placeholder files will be preserved (e.g. workspace/.gitkeep,
+  data/.gitkeep, workspace/uploads/.gitkeep, and any other nested .gitkeep files).
 
 As this is a destructive operation, this cannot be undone!
 EOF
@@ -67,11 +66,23 @@ EOF
 
 clean_dir() {
   local dir="$1"
-  local keep="$dir/.gitkeep"
-
   mkdir -p "$dir"
-  find "$dir" -mindepth 1 ! -path "$keep" -exec rm -rf {} +
-  touch "$keep"
+
+  # Collect all .gitkeep paths before touching anything
+  mapfile -t keeps < <(find "$dir" -name '.gitkeep' 2>/dev/null)
+
+  # Delete only top-level entries (rm -rf handles subtrees); avoids find
+  # trying to descend into dirs it already removed via a prior rm -rf.
+  find "$dir" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+
+  # Recreate every .gitkeep and its parent directory
+  for f in "${keeps[@]}"; do
+    mkdir -p "$(dirname "$f")"
+    touch "$f"
+  done
+
+  # Guarantee at least the root .gitkeep exists even if none were found
+  touch "$dir/.gitkeep"
 }
 
 confirm_reset

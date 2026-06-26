@@ -1,0 +1,35 @@
+model_list:
+  # Main model — all standard Claude aliases are redirected here via ANTHROPIC_DEFAULT_* env vars.
+  # Built-in subagents (Explore, claude-code-guide) use the haiku alias which resolves to this.
+  # - model_name: qwen3.6-35b
+  #   litellm_params:
+  #     model: openai/qwen3.6-35b
+  #     api_base: http://10.0.0.13:8000/v1
+  #     api_key: dummy
+  #     use_responses_api: false      # force chat/completions path
+  #   model_info:
+  #     supports_vision: true         # explicitly tell LiteLLM this model accepts images
+  #     mode: chat                    # explicitly declare this as a chat model
+  - model_name: claude-sonnet-4-5
+    litellm_params:
+      model: hosted_vllm/qwen3.6-35b
+      api_base: "os.environ/VLLM_URL"
+      api_key: dummy
+    model_info:
+      supports_vision: true
+
+  - model_name: claude-haiku-4-5
+    litellm_params:
+      model: hosted_vllm/qwen3.6-35b
+      api_base: "os.environ/VLLM_URL"
+      api_key: dummy
+    model_info:
+      supports_vision: true
+
+
+
+litellm_settings:
+  drop_params: true                 # silently drop unsupported params (thinking, effort, etc.) instead of erroring
+  use_responses_api: false
+  # Force the Anthropic messages endpoint to translate to chat/completions
+  forward_client_headers_to_llm_api: false

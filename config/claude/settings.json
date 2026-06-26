@@ -1,0 +1,23 @@
+{
+  "model": "claude-sonnet-4-5",
+  "theme": "dark",
+  "env": {
+    "DISABLE_AUTOUPDATER": "1",
+    "CLAUDE_CODE_DISABLE_TELEMETRY": "1",
+    "ANTHROPIC_BASE_URL": "http://127.0.0.1:4001",
+    "ANTHROPIC_API_KEY": "dummy",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-haiku-4-5",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-4-5",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-sonnet-4-5",
+    "ANTHROPIC_DEFAULT_FABLE_MODEL": "claude-sonnet-4-5",
+    "MAX_THINKING_TOKENS": "8000",
+    "CLAUDE_CODE_SKIP_WEB_FETCH_PREFLIGHT": "1"
+  },
+  "alwaysThinkingEnabled": true,
+  "verbose": true,
+  "autoUpdatesChannel": "stable",
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "deny": ["WebFetch", "WebSearch"]
+  }
+}

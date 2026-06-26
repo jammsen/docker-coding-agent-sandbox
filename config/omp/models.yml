@@ -13,3 +13,4 @@ providers:
         # OMP will refuse to send a request that would exceed contextWindow,
         # so keeping maxTokens conservative leaves headroom for the prompt.
         systemPromptSize: 4096
+
