@@ -17,6 +17,7 @@ services:
       - DEFAULT_TOOL=${DEFAULT_TOOL:-}          # pass-through from host shell; empty = show menu in browser
       - CLAUDE_CODE_NO_FLICKER=1                # prevents Claude Code from using alt-screen tricks that break scroll in WeTTY
       - LITELLM_UPSTREAM=http://agentic-litellm:4000   # upstream for claude-shim.js (Claude image-rewrite proxy on 127.0.0.1:4001)
+      - SEARXNG_URL=http://searxng:8080              # used by OMP's built-in web search (providers.webSearch=searxng) and mcp-searxng
     init: true                                  # tini as PID 1 — reaps zombie child processes
     restart: unless-stopped                     # auto-restart on failure or host reboot
     read_only: false                            # opencode writes session state
@@ -45,6 +46,7 @@ services:
       - ./config/omp/settings.json:/home/agent/.omp/agent/settings.json:rw
       - ./config/omp/models.yml:/home/agent/.omp/agent/models.yml:ro
       - ./config/omp/AGENTS.md:/home/agent/.omp/agent/AGENTS.md:ro
+      - ./config/omp/mcp.json:/home/agent/.omp/agent/mcp.json:ro
       # Claude Code config (read-only sources; entrypoint syncs them into ~/.claude/ on start)
       - ./config/claude/settings.json:/home/agent/.config/claude-settings.json:ro
       - ./config/claude/CLAUDE.md:/home/agent/.config/claude-CLAUDE.md:ro
@@ -58,6 +60,33 @@ services:
       - ./config/opencode/auth.json:/home/agent/.local/share/opencode/auth.json:ro
     # No network_mode: host — use bridge so container is isolated
     # but can still reach your vLLM server via host IP
+
+  searxng:
+    image: docker.io/searxng/searxng:latest
+    container_name: agentic-searxng
+    restart: unless-stopped
+    volumes:
+      - ./config/searxng:/etc/searxng:ro
+    environment:
+      - SEARXNG_BASE_URL=http://searxng:8080/
+    depends_on:
+      - valkey
+    # No published ports — only reachable internally via http://searxng:8080
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+      - DAC_OVERRIDE
+
+  valkey:
+    image: docker.io/valkey/valkey:9.1.0-trixie
+    container_name: agentic-valkey
+    command: valkey-server --save 30 1 --loglevel warning
+    restart: unless-stopped
+    volumes:
+      - valkey-data:/data
 
   litellm:
     image: ghcr.io/berriai/litellm:v1.89.3        # latest stable as of 2026-06-22; post-attack (1.82.7/1.82.8 were the compromised PyPI versions)
@@ -76,3 +105,6 @@ services:
       - ./config/litellm-config.yaml:/app/config.yaml:ro
     command: ["--config", "/app/config.yaml", "--port", "4000", "--host", "0.0.0.0"]
     restart: unless-stopped
+
+volumes:
+  valkey-data:

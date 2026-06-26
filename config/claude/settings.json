@@ -17,6 +17,6 @@
   "autoUpdatesChannel": "stable",
   "permissions": {
     "defaultMode": "acceptEdits",
-    "deny": ["WebFetch"]
+    "deny": ["WebFetch", "WebSearch"]
   }
 }

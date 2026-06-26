@@ -8,6 +8,7 @@ data/claude/*
 !data/claude/.gitkeep
 
 workspace/*
+!workspace/.mcp.json
 !workspace/uploads/
 workspace/uploads/*
 !workspace/uploads/.gitkeep

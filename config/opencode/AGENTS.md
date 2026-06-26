@@ -77,6 +77,10 @@ ss -tlnp | grep 1111 || echo "Port 1111 is free"
 
 Never use `&` alone without `nohup` for servers — background processes started without `nohup` may not survive shell resets.
 
+## Web Search
+
+`curl` and `wget` work fine for fetching a known URL directly. The built-in `webfetch` and `websearch` permissions are disabled. For search queries (no URL), use the `searxng_web_search` MCP tool — search engines block automated curl requests, so curl will return nothing useful on search pages. `web_url_read` is also available to fetch and convert a URL to markdown.
+
 ## Image Analysis
 
 When asked to analyze or describe an image at a file path, run the `analyze-image` command and report its output:

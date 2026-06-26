@@ -12,6 +12,10 @@ Rules:
   Do NOT proceed to the next task until WORKLOG.md has been updated.
 - If WORKLOG.md does not exist, create it before doing anything else.
 
+## Web Search
+
+`curl` and `wget` work fine for fetching a known URL directly. For search queries (no URL), use the `searxng_web_search` MCP tool — search engines block automated curl requests, so curl will return nothing useful on search pages. `web_url_read` is also available to fetch and convert a URL to markdown.
+
 ## Image Analysis
 
 When asked to analyze or describe an image at a file path, run the `analyze-image` command and report its output:

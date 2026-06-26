@@ -22,6 +22,10 @@ Use nohup with a PID file — do not use bare & without nohup.
 Playwright with Chromium is pre-installed. Due to cap_drop:ALL, always launch with:
   --no-sandbox --disable-setuid-sandbox
 
+## Web Search
+
+The built-in `WebSearch` and `WebFetch` tools are disabled. `curl` and `wget` work fine for fetching a known URL directly. For search queries (no URL), use the `searxng_web_search` MCP tool — search engines block automated curl requests, so curl will return nothing useful on search pages. `web_url_read` is also available to fetch and convert a URL to markdown.
+
 ## Image Analysis
 The model behind this sandbox is vision-capable. To analyse an image, use the **Read tool**
 directly on the image file path (png, jpg, jpeg, gif, webp), e.g.:

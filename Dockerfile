@@ -1,5 +1,7 @@
 FROM ubuntu:26.04@sha256:f3d28607ddd78734bb7f71f117f3c6706c666b8b76cbff7c9ff6e5718d46ff64
 
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 ENV DEBIAN_FRONTEND=noninteractive \
     TZ=Europe/Berlin \
     PUID=1000 \
@@ -16,7 +18,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 
 # Install basic tools
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# hadolint ignore=DL3008 # Base-Image Ubuntu 26.04 is already pinned
+RUN apt-get update && apt-get install -y --no-install-recommends --no-install-suggests \
     build-essential \
     ca-certificates \
     curl \
@@ -47,13 +50,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Node.js — system-wide, available for workspace projects
+# hadolint ignore=DL3008 # Base-Image Ubuntu 26.04 is already pinned
 RUN apt-get update && apt-get install -y --no-install-recommends --no-install-suggests nodejs npm \
     && apt-get autoremove -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # WeTTY — browser-based terminal served on port 1111
-RUN npm install -g wetty@3.1.0
+# mcp-searxng — pre-installed so OMP (which eagerly starts MCP servers at launch)
+#               doesn't time out waiting for npx to download it on first use
+RUN npm install -g wetty@3.1.0 mcp-searxng@1.8.0
 
 # Patch wetty's env.js which assumes "env (GNU coreutils)" version string.
 # Ubuntu 26.04 ships uutils coreutils whose version output is "env (uutils coreutils) 0.8.0",
@@ -81,7 +87,8 @@ RUN mkdir -p /etc/wetty \
     && chmod 644 /etc/wetty/key.pem /etc/wetty/cert.pem
 
 # Chromium headless system libraries — required for Playwright
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# hadolint ignore=DL3008 # Base-Image Ubuntu 26.04 is already pinned
+RUN apt-get update && apt-get install -y --no-install-recommends --no-install-suggests \
     fonts-liberation \
     fonts-noto-color-emoji \
     libasound2t64 \
@@ -149,6 +156,7 @@ RUN npx -y playwright install chromium
 # claude — installs to ~/.local/bin/claude which is already on PATH via ENV above
 RUN curl -fsSL https://claude.ai/install.sh | bash
 
+# hadolint ignore=DL3002 # Entrypoint drops privileges to agent user
 USER root
 WORKDIR /
 
