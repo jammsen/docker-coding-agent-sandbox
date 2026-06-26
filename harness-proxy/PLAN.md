@@ -185,6 +185,48 @@ with `data: [DONE]`. The proxy must emit the Anthropic event sequence (each as
 Keep an index counter for content blocks. Tool-call argument deltas arrive incrementally — buffer
 per `tool_calls[].index`.
 
+### 5d. Error handling & logging contract (production)
+
+Step 2 ships a deliberately minimal version (one `anthropic_error` helper, upstream failures → 502,
+`eprintln!` for startup). Before cutover (§6 step 6) harden it to this contract. Goal: an operator can
+debug a failure from the logs **without** any prompt content, secret, or token ever being written.
+
+**Logging — structured, on stderr, never bodies.**
+- Use `tracing` + `tracing-subscriber` (the axum-native stack). Level from `RUST_LOG` (default `info`).
+  Emit to **stderr** so it interleaves with the container's other startup logs; one event per request.
+- Per request log **metadata only**: a generated request id, method, path, chosen `model`, response
+  status, upstream status, and latency (ms). Add the request id to a response header (`x-request-id`)
+  for correlation.
+- **Never log**: the request or response body, `system`/message text, image data, the `Authorization`
+  header, or any token counts that could leak content. (Prompts routinely contain secrets/PII —
+  treat them as such.) This is also a §8 don't.
+- No `unwrap()`/`panic!` on the request path — a panic both crashes the worker and can dump state.
+  `panic = "abort"` is set, so a stray panic kills the process; keep them out of handlers.
+
+**Error codes — correct status, clean propagation.**
+- Replace the ad-hoc tuple returns with **one `ProxyError` enum implementing `IntoResponse`**, so
+  handlers are `Result<Json<…>, ProxyError>` and there is exactly one place that maps error → status
+  → Anthropic envelope. Each arm logs at the right level (client errors `warn`, upstream/proxy `error`).
+- Map to the status the client should actually see, and to Anthropic's `error.type`
+  (`invalid_request_error` / `authentication_error` / `not_found_error` / `rate_limit_error` /
+  `overloaded_error` / `api_error`):
+
+  | Cause | HTTP | Anthropic `error.type` |
+  |---|---|---|
+  | Malformed/invalid client JSON (axum rejection) | `400` | `invalid_request_error` |
+  | Upstream connection refused / DNS / TLS failure | `502` | `api_error` |
+  | Upstream timed out (see below) | `504` | `api_error` |
+  | Upstream returned 429 | `429` | `rate_limit_error` |
+  | Upstream returned 5xx | `502` | `api_error` |
+  | Upstream body failed to decode | `502` | `api_error` |
+
+  Always return the Anthropic envelope `{"type":"error","error":{"type":…,"message":…}}` so Claude
+  Code parses our failures exactly like upstream's; never leak a raw axum plaintext 422 or a Rust
+  error string verbatim — keep `message` short and non-sensitive.
+- Set explicit timeouts on the `reqwest::Client` (connect + overall request) so a hung vLLM surfaces
+  as a clean `504` instead of hanging the Claude session. (Streaming, Step 3, needs a longer/disabled
+  overall timeout — handle that when streaming lands.)
+
 ---
 
 ## 6. Step-by-step (each step independently testable)
@@ -192,15 +234,22 @@ per `tool_calls[].index`.
 1. ✅ **DONE — Scaffold + Dockerfile.** Cargo bin, axum, `HARNESS_PROXY_BIND` env, stub
    `POST /v1/messages` + `count_tokens` + `/health`. Multi-stage Ubuntu→scratch (native arch) builds,
    runs non-root, ~860 kB. Verified via `curl`. Compose service `harness-proxy` added (hardened).
-2. **➡️ NEXT — Non-streaming translation** against real vLLM (text only). Add `reqwest`(rustls)+`serde`;
-   create `anthropic.rs`/`openai.rs`/`translate.rs`; replace the `/v1/messages` stub with a real
-   Anthropic→OpenAI request, POST to `${VLLM_URL}/v1/chat/completions`, translate the response back.
-   ✅ real model answer round-trips. Test in compose: the proxy reaches vLLM at `10.0.0.13:8000`.
-3. **Streaming SSE** (text only). ✅ Claude Code in the container streams a normal chat reply.
+2. ✅ **DONE — Non-streaming translation** against real vLLM (text only). Added `reqwest`(rustls)+`serde`;
+   created `anthropic.rs`/`openai.rs`/`translate.rs`; replaced the `/v1/messages` stub with a real
+   Anthropic→OpenAI request, POST to `${VLLM_URL}/v1/chat/completions`, response translated back.
+   `VLLM_URL`/`VLLM_MODEL` are required env (no hardcoded defaults). Verified vs. a local OpenAI mock
+   (vLLM `10.0.0.13:8000` unreachable from dev host); re-verify in compose against real vLLM.
+3. **➡️ NEXT — Streaming SSE** (text only). ✅ Claude Code in the container streams a normal chat reply.
 4. **Image hoist + param strip + alias map + `count_tokens`.** ✅ Read-an-image flow works
    end-to-end (the thing LiteLLM broke).
 5. **(GATED on jammsen)** Tool-call translation, non-stream then streaming. ✅ a tool-using task works.
-6. **(GATED — do last, after proxy proven)** Remove the old stack:
+6. **Production logging & error handling** (independent — can land any time after Step 2, **must be
+   in before cutover**). Implement the contract in §5d: structured `tracing` logs to stderr,
+   never logging prompt/response bodies or auth; one `ProxyError` type → correct HTTP status +
+   Anthropic error envelope; client + upstream timeouts. ✅ a malformed request returns a clean
+   `400` Anthropic error, a dead upstream a `502`, an upstream timeout a `504`, and logs carry a
+   request id + status + latency but no message content.
+7. **(GATED — do last, after proxy proven)** Remove the old stack:
    - `compose.yml`: delete the `litellm` service + `LITELLM_UPSTREAM` env; add proxy build/run.
    - delete `config/litellm-config.yaml`, `scripts/claude-shim.js`.
    - `entrypoint.sh`: drop the `claude-shim` supervisor block; start `harness-proxy` instead.
@@ -232,6 +281,8 @@ Until Step 6, run the proxy **alongside** LiteLLM (different port) so nothing br
 - ❌ No multi-crate workspace, no plugin abstraction, no config file — env vars only.
 - ❌ Don't delete LiteLLM until the proxy is proven (Step 6 is last).
 - ❌ Don't oversell "<15 MB RAM" — realistic is 15–40 MB with tokio + stream buffers.
+- ❌ **Never log request/response bodies, prompt or `system` text, image data, the `Authorization`
+  header, or token counts** — metadata only (§5d). Prompts carry secrets/PII.
 
 ---
 
