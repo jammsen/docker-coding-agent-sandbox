@@ -14,14 +14,23 @@ Branch: `feat/harness-proxy` (off `feat/webtty`).
   (Ubuntu builder → static musl → `FROM scratch`) builds for the **native arch** (amd64/arm64 via
   `TARGETARCH`); image is **~860 kB**, runs non-root. Hardened compose service `harness-proxy` added.
   All three endpoints verified with `curl`.
+- ✅ **Step 2 done**: non-streaming `/v1/messages` Anthropic→OpenAI translation, real vLLM call.
+  `reqwest` (rustls-tls, json; default-features off) + `serde` (derive) added. New typed modules
+  `src/{anthropic,openai,translate}.rs`. Request: alias map (any model → `VLLM_MODEL`), system +
+  message/content-block mapping (text concatenated; image/tool_* blocks deserialize but drop —
+  Steps 4/5), param strip, `Authorization: Bearer dummy`. Response: content/finish_reason/usage →
+  Anthropic shape; upstream failures → 502 Anthropic-shaped error. 3 translation unit tests.
+  Verified: musl→scratch `docker compose build`, container vs. a local OpenAI mock (vLLM
+  `10.0.0.13:8000` unreachable from dev host). **Not yet:** streaming, image-hoist, count_tokens
+  (still a stub), tool-calls.
 - **Toolchain decisions made:** edition **2024** (`rust-version 1.85`), **axum 0.8**, tokio 1,
-  serde_json 1. `reqwest`/`serde` **not added yet** (come in Step 2).
-- **Files that exist:** `harness-proxy/{Cargo.toml,Dockerfile,.dockerignore,src/main.rs}`.
-  `anthropic.rs` / `openai.rs` / `translate.rs` do **not** exist yet — create them in Step 2.
+  serde_json 1, **reqwest 0.12** (rustls-tls + json, default-features off), **serde 1** (derive).
+- **Files that exist:** `harness-proxy/{Cargo.toml,Dockerfile,.dockerignore,src/main.rs,
+  src/anthropic.rs,src/openai.rs,src/translate.rs}`.
 - **Wiring:** proxy is NOT yet in Claude's path. Sandbox still uses litellm + `claude-shim.js`.
   Compose runs the proxy standalone (`agentic-harness-proxy`, bind `0.0.0.0:4000`, no published
   ports) so it doesn't interfere. Cutover is Step 6.
-- **➡️ Next: Step 2** — non-streaming Anthropic→OpenAI translation against real vLLM.
+- **➡️ Next: Step 3** — streaming SSE translation (OpenAI chunks → Anthropic Messages events).
 
 ---
 
