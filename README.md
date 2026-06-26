@@ -83,7 +83,7 @@ After cloning, the repository already contains this layout:
 ```
 docker-agentic-harness-sandbox/
 ├── Dockerfile
-├── compose.yml             ← defines the `sandbox` and `litellm` services
+├── compose.yml             ← defines the `sandbox`, `litellm` and `harness-proxy` services
 ├── start.sh
 ├── scripts/                ← runtime + maintenance scripts (baked into the image)
 │   ├── entrypoint.sh       ← container startup: user setup, launches WeTTY + upload server + shim
@@ -95,6 +95,7 @@ docker-agentic-harness-sandbox/
 ├── patches/                ← one-off scripts applied to WeTTY at image build time, not present at runtime
 │   ├── wetty-csp.js        ← allows the upload-server iframe to load inside WeTTY without being browser-blocked
 │   └── wetty-html.js       ← injects the upload overlay panel (toggle button + slide-in drawer) into WeTTY's page
+├── harness-proxy/          ← Rust replacement for litellm + claude-shim.js (WIP, issue #10) — see harness-proxy/README.md
 ├── config/
 │   ├── opencode/
 │   │   ├── opencode.json   ← opencode provider and agent config (mounted read-only)
