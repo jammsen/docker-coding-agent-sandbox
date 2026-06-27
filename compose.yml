@@ -73,6 +73,8 @@ services:
     depends_on:
       - valkey
     # No published ports — only reachable internally via http://searxng:8080
+    ports:
+      - "8080:8080/tcp"
     cap_drop:
       - ALL
     cap_add:

@@ -167,5 +167,6 @@ COPY --chmod=755 scripts/upload-server/ /upload-server/
 COPY --chmod=644 scripts/claude-shim.js /claude-shim.js
 COPY --chmod=755 scripts/agent-task.sh /usr/local/bin/agent-task
 COPY --chmod=755 scripts/analyze-image.js /usr/local/bin/analyze-image
+COPY --chmod=644 scripts/.screenrc /home/agent/.screenrc
 
 ENTRYPOINT ["./entrypoint.sh"]

@@ -1,0 +1,5 @@
+# Allow OSC 52 clipboard writes so Claude Code's copy notifications actually reach
+# the browser clipboard via xterm.js. Without this, screen silently drops the
+# escape sequences and the clipboard is never updated.
+# OSC 52 reads are not supported by xterm.js/WeTTY, so clipboard read risk is moot.
+allowwindowops on
