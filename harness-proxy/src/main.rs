@@ -153,7 +153,7 @@ async fn messages(
         .json::<ChatResponse>()
         .await
         .map_err(|_| ProxyError::Upstream("failed to decode upstream response"))?;
-    Ok(Json(translate::to_anthropic(cr, state.vllm_model, thinking)).into_response())
+    Ok(Json(translate::to_anthropic(cr, state.vllm_model, thinking)?).into_response())
 }
 
 /// POST /v1/messages/count_tokens — Anthropic returns `{"input_tokens": N}`, officially an estimate.
@@ -188,6 +188,7 @@ async fn count_tokens(
 /// The single error type for the request path. One place maps cause -> HTTP status -> Anthropic
 /// envelope, so Claude Code parses our failures exactly like upstream's. Messages are short and
 /// non-sensitive — upstream bodies are never echoed or logged (§5d).
+#[derive(Debug)]
 pub enum ProxyError {
     BadRequest(&'static str),  // 400 invalid_request_error
     Upstream(&'static str),    // 502 api_error (connect/DNS/TLS/5xx/decode)

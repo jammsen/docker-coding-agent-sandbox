@@ -57,7 +57,10 @@ async fn pump(mut resp: reqwest::Response, model: String, thinking: bool, tx: mp
     loop {
         let chunk = match resp.chunk().await {
             Ok(Some(c)) => c,
-            _ => break, // end of stream or read error — fall through to the closing events
+            Ok(None) => break, // clean end of stream — emit the normal closing events
+            // A broken/truncated upstream stream must NOT look like a successful completion: emit an
+            // Anthropic error event and stop, rather than falling through to message_stop.
+            Err(_) => return send_error(&tx, "upstream stream read error").await,
         };
         buf.push_str(&String::from_utf8_lossy(&chunk));
 
@@ -68,7 +71,11 @@ async fn pump(mut resp: reqwest::Response, model: String, thinking: bool, tx: mp
             if data == "[DONE]" {
                 continue;
             }
-            let Ok(c) = serde_json::from_str::<ChatChunk>(data) else { continue };
+            let c = match serde_json::from_str::<ChatChunk>(data) {
+                Ok(c) => c,
+                // Malformed chunk after partial output: same as a broken stream — fail, don't close clean.
+                Err(_) => return send_error(&tx, "malformed upstream stream chunk").await,
+            };
             for (name, payload) in t.push(c) {
                 if tx.send(Ok(event(name, payload))).await.is_err() {
                     return; // client hung up
@@ -259,6 +266,13 @@ fn delta(index: i32, delta: Value) -> (&'static str, Value) {
 /// Build an Anthropic SSE event; axum's Sse adds the `event:`/`data:` framing.
 fn event(name: &str, data: Value) -> Event {
     Event::default().event(name).data(data.to_string())
+}
+
+/// Emit an Anthropic-style `error` event and end the stream (no message_stop). Used when the
+/// upstream stream breaks mid-flight so a truncation can't masquerade as a clean completion.
+async fn send_error(tx: &mpsc::Sender<Result<Event, Infallible>>, message: &str) {
+    let payload = json!({"type":"error","error":{"type":"api_error","message":message}});
+    let _ = tx.send(Ok(event("error", payload))).await;
 }
 
 #[cfg(test)]

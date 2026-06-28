@@ -79,12 +79,16 @@ fn push_blocks(out: &mut Vec<ChatMessage>, role: &str, blocks: Vec<ContentBlock>
                 _ => {} // images/thinking from an assistant turn are dropped
             }
         }
-        out.push(ChatMessage {
-            role: "assistant".into(),
-            content: (!text.is_empty()).then(|| MessageContent::Text(text)),
-            tool_calls: (!tool_calls.is_empty()).then_some(tool_calls),
-            tool_call_id: None,
-        });
+        // A turn of only dropped blocks (e.g. echoed thinking) would yield an empty assistant
+        // message — invalid for vLLM (502). Skip it entirely.
+        if !text.is_empty() || !tool_calls.is_empty() {
+            out.push(ChatMessage {
+                role: "assistant".into(),
+                content: (!text.is_empty()).then(|| MessageContent::Text(text)),
+                tool_calls: (!tool_calls.is_empty()).then_some(tool_calls),
+                tool_call_id: None,
+            });
+        }
         return;
     }
 
@@ -166,12 +170,24 @@ fn map_tool_choice(tc: Option<Value>) -> Option<Value> {
     })
 }
 
-/// Concatenate text blocks; non-text blocks are ignored (used for system + flattening).
+/// Concatenate text blocks; non-text blocks are ignored (used for system + token flattening).
+/// Descends into `tool_result` content so count_tokens doesn't undercount tool-heavy turns.
 fn blocks_text(blocks: &[ContentBlock]) -> String {
     let mut out = String::new();
     for b in blocks {
-        if let ContentBlock::Text { text } = b {
-            push_line(&mut out, text);
+        match b {
+            ContentBlock::Text { text } => push_line(&mut out, text),
+            ContentBlock::ToolResult { content, .. } => match content {
+                Some(ToolResultContent::Text(t)) => push_line(&mut out, t),
+                Some(ToolResultContent::Blocks(bs)) => {
+                    let nested = blocks_text(bs);
+                    if !nested.is_empty() {
+                        push_line(&mut out, &nested);
+                    }
+                }
+                None => {}
+            },
+            _ => {}
         }
     }
     out
@@ -204,7 +220,7 @@ pub fn request_text(req: &MessagesRequest) -> String {
 
 /// OpenAI chat response -> Anthropic Messages response (non-streaming). `thinking` surfaces vLLM's
 /// reasoning as a thinking block only when the client enabled it (PLAN.md §0).
-pub fn to_anthropic(resp: ChatResponse, model: String, thinking: bool) -> MessagesResponse {
+pub fn to_anthropic(resp: ChatResponse, model: String, thinking: bool) -> Result<MessagesResponse, crate::ProxyError> {
     let (msg, finish) = match resp.choices.into_iter().next() {
         Some(c) => (c.message, c.finish_reason),
         None => Default::default(),
@@ -221,15 +237,21 @@ pub fn to_anthropic(resp: ChatResponse, model: String, thinking: bool) -> Messag
         content.push(OutputBlock::Text { text: t });
     }
     for tc in msg.tool_calls {
+        // arguments is a JSON-object string. Empty/absent means a no-arg call ({}); anything
+        // non-empty that won't parse is a corrupt tool-call contract — fail rather than invent {}.
+        let input = match tc.function.arguments {
+            Some(a) if !a.trim().is_empty() => serde_json::from_str(&a)
+                .map_err(|_| crate::ProxyError::Upstream("upstream returned malformed tool_call arguments"))?,
+            _ => json!({}),
+        };
         content.push(OutputBlock::ToolUse {
             id: tc.id.unwrap_or_else(|| "toolu_proxy".into()),
             name: tc.function.name.unwrap_or_default(),
-            // arguments is a JSON string; parse to an object, else pass through as a string.
-            input: tc.function.arguments.and_then(|a| serde_json::from_str(&a).ok()).unwrap_or(json!({})),
+            input,
         });
     }
 
-    MessagesResponse {
+    Ok(MessagesResponse {
         id: resp.id.map(|i| format!("msg_{i}")).unwrap_or_else(|| "msg_proxy".to_string()),
         kind: "message",
         role: "assistant",
@@ -238,7 +260,7 @@ pub fn to_anthropic(resp: ChatResponse, model: String, thinking: bool) -> Messag
         stop_reason: stop_reason(finish.as_deref()),
         stop_sequence: None,
         usage: anthropic::Usage { input_tokens: usage.prompt_tokens, output_tokens: usage.completion_tokens },
-    }
+    })
 }
 
 /// OpenAI `finish_reason` -> Anthropic `stop_reason` (PLAN.md §5b).
@@ -343,7 +365,7 @@ mod tests {
         }))
         .unwrap();
 
-        let a = to_anthropic(resp, "m".to_string(), false);
+        let a = to_anthropic(resp, "m".to_string(), false).unwrap();
         assert_eq!(a.stop_reason, "tool_use");
         assert_eq!(a.content.len(), 1); // reasoning dropped (thinking off)
         let v = serde_json::to_value(&a.content[0]).unwrap();
@@ -358,8 +380,20 @@ mod tests {
             "choices": [{ "message": { "content": "answer", "reasoning": "because" }, "finish_reason": "stop" }]
         }))
         .unwrap();
-        let a = to_anthropic(resp, "m".to_string(), true);
+        let a = to_anthropic(resp, "m".to_string(), true).unwrap();
         let kinds: Vec<_> = a.content.iter().map(|b| serde_json::to_value(b).unwrap()["type"].as_str().unwrap().to_string()).collect();
         assert_eq!(kinds, ["thinking", "text"]);
+    }
+
+    #[test]
+    fn malformed_tool_arguments_fail_instead_of_defaulting_to_empty() {
+        let resp: ChatResponse = serde_json::from_value(json!({
+            "choices": [{
+                "message": { "tool_calls": [{ "id": "call_1", "function": { "name": "f", "arguments": "{not json" } }] },
+                "finish_reason": "tool_calls"
+            }]
+        }))
+        .unwrap();
+        assert!(to_anthropic(resp, "m".to_string(), false).is_err());
     }
 }

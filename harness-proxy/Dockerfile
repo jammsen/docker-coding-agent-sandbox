@@ -35,10 +35,10 @@ RUN set -eux; \
 
 WORKDIR /build
 # ponytail: skip the cargo-chef/dummy-main dep-caching dance — copy sources and build once.
-COPY Cargo.toml ./
+COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 RUN set -eux; TRIPLE="$(cat /triple)"; \
-    cargo build --release --target "$TRIPLE"; \
+    cargo build --locked --release --target "$TRIPLE"; \
     cp "target/$TRIPLE/release/harness-proxy" /harness-proxy
 
 # Final: scratch + the static binary only, running as a non-root numeric UID.

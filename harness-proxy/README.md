@@ -54,12 +54,13 @@ Built incrementally (roadmap in [`PLAN.md` §6](./PLAN.md)):
 |---|---|---|
 | 1 | Scaffold, Dockerfile, `/health` | ✅ done |
 | 2 | Non-streaming `/v1/messages` translation (text) | ✅ done |
-| 3 | Streaming SSE | ⏳ planned |
-| 4 | Image hoist, param strip, `count_tokens` | ⏳ planned (`count_tokens` is a stub today) |
-| 5 | Tool-call translation | ⏳ planned (gated on vLLM tool-parser config) |
-| 6 | Cut over: remove LiteLLM + `claude-shim.js` | ⏳ planned |
+| 3 | Streaming SSE | ✅ done |
+| 4 | Image hoist, param strip, `count_tokens` | ✅ done |
+| 5 | Tool-call translation | ✅ done |
+| 6 | Production logging & error handling | ✅ done |
+| 7 | Cut over: remove LiteLLM + `claude-shim.js` | ⏳ planned (gated — do last) |
 
-Until step 6 the proxy runs **alongside** LiteLLM on a separate port, so nothing
+Until the cutover the proxy runs **alongside** LiteLLM on a separate port, so nothing
 in the existing sandbox breaks while it's being proven.
 
 ## Configuration

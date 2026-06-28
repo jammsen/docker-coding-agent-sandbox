@@ -347,7 +347,7 @@ debug a failure from the logs **without** any prompt content, secret, or token e
      `MAX_THINKING_TOKENS=8000` / `alwaysThinkingEnabled=true` as-is — the proxy handles thinking (§0a #1).
    - Leave `scripts/upload-server.js` and `scripts/analyze-image.js` **untouched** (out of scope).
 
-Until Step 6, run the proxy **alongside** LiteLLM (different port) so nothing breaks during dev.
+Until the Step 7 cutover (old stack removed), run the proxy **alongside** LiteLLM (different port) so nothing breaks during dev.
 
 ---
 
