@@ -52,7 +52,7 @@ async fn main() {
     // the in-image final deploy can override to 127.0.0.1:4000.
     let bind = env::var("HARNESS_PROXY_BIND").unwrap_or_else(|_| "0.0.0.0:4000".to_string());
     // Deployment-specific — required, never baked into the binary (set via compose). Fail fast.
-    let vllm_url = require_env("VLLM_URL").trim_end_matches('/').to_string();
+    let vllm_url = normalize_vllm_url(&require_env("VLLM_URL"));
     let vllm_model = require_env("VLLM_MODEL");
     let request_timeout = Duration::from_secs(
         env::var("HARNESS_PROXY_TIMEOUT_SECS")
@@ -87,6 +87,13 @@ async fn main() {
 
 fn require_env(key: &str) -> String {
     env::var(key).unwrap_or_else(|_| panic!("harness-proxy: {key} must be set"))
+}
+
+/// Normalize `VLLM_URL` to the server root (no trailing slash, no `/v1`). The repo's other consumer
+/// (litellm) sets `VLLM_URL` *with* a `/v1` suffix; we append `/v1/chat/completions` and `/tokenize`
+/// ourselves, so accept either form and avoid a `/v1/v1/...` at cutover (PLAN.md §0a #2).
+fn normalize_vllm_url(raw: &str) -> String {
+    raw.trim_end_matches('/').trim_end_matches("/v1").trim_end_matches('/').to_string()
 }
 
 /// Per-request access log + correlation id. Wraps each request in a span carrying a generated
@@ -224,5 +231,18 @@ impl IntoResponse for ProxyError {
             tracing::error!(status = status.as_u16(), kind, message, "proxy error");
         }
         (status, Json(json!({ "type": "error", "error": { "type": kind, "message": message } }))).into_response()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_vllm_url;
+
+    #[test]
+    fn normalize_vllm_url_accepts_root_and_v1_forms() {
+        let want = "http://10.0.0.13:8000";
+        for input in ["http://10.0.0.13:8000", "http://10.0.0.13:8000/", "http://10.0.0.13:8000/v1", "http://10.0.0.13:8000/v1/"] {
+            assert_eq!(normalize_vllm_url(input), want, "input: {input}");
+        }
     }
 }
