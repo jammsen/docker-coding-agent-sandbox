@@ -26,7 +26,9 @@ use openai::ChatResponse;
 // vLLM can be slow on long generations but should never hang a Claude session: bound the connect
 // and (non-streaming) request. Streaming omits the overall timeout — a stream legitimately runs long.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
-const DEFAULT_REQUEST_TIMEOUT_SECS: u64 = 180;
+// 600s matches the proven ceiling of the claude-shim.js it replaces; reasoning (now on by default)
+// makes non-stream replies longer, so a tighter cap would 504 legitimate generations (PLAN.md §0a #3).
+const DEFAULT_REQUEST_TIMEOUT_SECS: u64 = 600;
 
 #[derive(Clone)]
 struct AppState {

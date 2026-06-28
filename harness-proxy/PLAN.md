@@ -67,7 +67,8 @@ has been **rebased onto `main`** — see §0a for the main-side deltas to accoun
   400 invalid_request_error (malformed body), 502 api_error (connect/DNS/TLS/5xx/decode), 504
   api_error (timeout), 429 rate_limit_error — messages short and non-sensitive (upstream bodies never
   echoed/logged). reqwest client has a **connect timeout (10s)** + tunable overall timeout
-  (`HARNESS_PROXY_TIMEOUT_SECS`, default 180; streaming omits the overall one). **Verified live:**
+  (`HARNESS_PROXY_TIMEOUT_SECS`, default 600 — matches the shim, §0a #3; streaming omits the overall
+  one). **Verified live:**
   malformed→400, dead upstream→502, hung upstream→504 (~2s with the cap), happy path 200 — all with a
   correlated request id and no content in the logs.
 - **Wiring:** proxy is NOT yet in Claude's path. Sandbox still uses litellm + `claude-shim.js`.
