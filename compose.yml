@@ -58,7 +58,10 @@ services:
       # Your project workspace (read-write so tools can edit files)
       - ./workspace:/home/agent/workspace:rw
       - ./data/opencode:/home/agent/.local/share/opencode
-      - ./config/opencode/auth.json:/home/agent/.local/share/opencode/auth.json:ro
+      # NOT mounted directly to .local/share/opencode/auth.json — nesting a file mount inside
+      # an already-mounted directory breaks on Docker Desktop for Mac (virtiofs "mountpoint is
+      # outside of rootfs" error). Entrypoint symlinks it into place instead, keeping it live.
+      - ./config/opencode/auth.json:/home/agent/.config/opencode-auth.json:ro
     # No network_mode: host — use bridge so container is isolated
     # but can still reach your vLLM server via host IP
 

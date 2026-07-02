@@ -89,6 +89,21 @@ if [[ -f "$CLAUDE_CFG_SRC_SETTINGS" ]]; then
     echo "> Claude Code config synced to $CLAUDE_DIR and $CLAUDE_JSON"
 fi
 
+# Link opencode auth.json into place instead of bind-mounting it directly at
+# .local/share/opencode/auth.json — that path is nested inside the .local/share/opencode
+# dir mount above, and Docker Desktop for Mac's virtiofs backend fails to create nested
+# mountpoints ("mountpoint ... is outside of rootfs"). The source stays a live bind mount
+# at a non-nested path, so host edits to config/opencode/auth.json still apply immediately.
+OPENCODE_AUTH_SRC="$APP_HOME/.config/opencode-auth.json"
+OPENCODE_DATA_DIR="$APP_HOME/.local/share/opencode"
+
+if [[ -f "$OPENCODE_AUTH_SRC" ]]; then
+    mkdir -p "$OPENCODE_DATA_DIR"
+    chown "$APP_USER":"$APP_GROUP" "$OPENCODE_DATA_DIR"
+    ln -sf "$OPENCODE_AUTH_SRC" "$OPENCODE_DATA_DIR/auth.json"
+    echo "> opencode auth.json linked into $OPENCODE_DATA_DIR"
+fi
+
 OPENCODE_WORKSPACE="/home/agent/workspace"
 readonly OPENCODE_WORKSPACE
 
