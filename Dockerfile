@@ -76,6 +76,10 @@ RUN sed -i \
 COPY --chmod=644 patches/ /tmp/patches/
 RUN node /tmp/patches/wetty-csp.js && node /tmp/patches/wetty-html.js && rm -rf /tmp/patches
 
+# Replace WeTTY's default favicon with our own console icon.
+# Alternates live in assets/favicon-alternates/ for reference, not used at build time.
+COPY --chmod=644 assets/favicon.ico /usr/local/lib/node_modules/wetty/build/client/favicon.ico
+
 # Self-signed TLS cert for WeTTY — avoids browser HTTPS-upgrade blocking on HTTP
 # Browsers show a one-time "proceed anyway" warning, then work fine.
 RUN mkdir -p /etc/wetty \
